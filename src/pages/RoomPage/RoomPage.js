@@ -171,6 +171,8 @@ const SwitchTab = () => {
           <Grid item xs={12} sm={3} md={2} lg={2}>
             <div className="react-select-drops">
               <Select
+                menuPortalTarget={document.body}
+                styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                 onChange={languageChangeHandler}
                 defaultValue={languagesAvailable[11]}
                 options={languagesAvailable}
@@ -180,6 +182,8 @@ const SwitchTab = () => {
           <Grid item xs={12} sm={3} md={2} lg={2}>
             <div className="react-select-drops">
               <Select
+                menuPortalTarget={document.body}
+                styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                 onChange={themeChangeHandler}
                 defaultValue={themesAvailable[0]}
                 options={themesAvailable}
@@ -189,6 +193,8 @@ const SwitchTab = () => {
           <Grid item xs={12} sm={3} md={2} lg={2}>
             <div className="react-select-drops">
               <Select
+                menuPortalTarget={document.body}
+                styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                 onChange={keymapsChangeHandler}
                 defaultValue={keyMapsAvailable[0]}
                 options={keyMapsAvailable}
