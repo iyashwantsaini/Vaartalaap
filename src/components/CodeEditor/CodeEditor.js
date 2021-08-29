@@ -1,12 +1,4 @@
-// https://www.thegreatcodeadventure.com/real-time-react-with-socket-io-building-a-pair-programming-app/
-
 import { useState, useEffect } from "react";
-import CodeMirror from "@uiw/react-codemirror";
-import "codemirror/addon/display/autorefresh";
-import "codemirror/addon/comment/comment";
-import "codemirror/addon/edit/matchbrackets";
-import "codemirror/keymap/sublime";
-import "codemirror/theme/monokai.css";
 import "./CodeEditor.css";
 import React from "react";
 import { makeStyles } from "@material-ui/core/styles";
@@ -14,6 +6,22 @@ import Grid from "@material-ui/core/Grid";
 import SlowMotionVideoIcon from "@material-ui/icons/SlowMotionVideo";
 import Textarea from "muicss/lib/react/textarea";
 import Button from "@material-ui/core/Button";
+import { CodeMirrorBinding } from "y-codemirror";
+import { UnControlled as CodeMirror } from "react-codemirror2";
+import * as Y from "yjs";
+import { WebrtcProvider } from "y-webrtc";
+import { useSelector } from "react-redux";
+import { useParams } from "react-router-dom";
+
+import {
+  uniqueNamesGenerator,
+  adjectives,
+  colors,
+  animals,
+} from "unique-names-generator";
+import { randomHexColor } from "random-hex-color-generator";
+import "./CodeEditorAddons";
+import setLanguageMode from "../../data/languageMapping";
 
 const useStyles = makeStyles((theme) => ({
   root: {
@@ -22,12 +30,14 @@ const useStyles = makeStyles((theme) => ({
 }));
 
 const Editor = (props) => {
+  const [EditorRef, setEditorRef] = useState(null);
   const [codeWritten, setCodeWritten] = useState(``);
   const [inputArgs, setInputArgs] = useState(``);
   const [outputPiston, setOutputPiston] = useState(``);
   const [cmdLineArgs, setCmdLineArgs] = useState(``);
   const classes = useStyles();
   const [languageObject, setLanguageObject] = useState({});
+  const { roomID } = useParams();
 
   useEffect(() => {
     setLanguageObject(props.language);
@@ -80,42 +90,100 @@ const Editor = (props) => {
       });
   };
 
+  const handleEditorDidMount = (editor) => {
+    window.editor = editor;
+    setEditorRef(editor);
+  };
+  const { language, fontSize, theme, keybinds } = useSelector(
+    (state) => state.codeEditorConfig
+  );
+  // console.log(language, fontSize, theme, keybinds);
+  const username = uniqueNamesGenerator({
+    dictionaries: [adjectives, colors, animals],
+  });
+
+  useEffect(() => {
+    if (EditorRef) {
+      const ydoc = new Y.Doc();
+      const yText = ydoc.getText("codemirror");
+      const yUndoManager = new Y.UndoManager(yText);
+
+      let provider;
+      try {
+        provider = new WebrtcProvider(roomID, ydoc, {
+          signaling: [
+            "wss://signaling.yjs.dev",
+            "wss://y-webrtc-signaling-eu.herokuapp.com",
+            "wss://y-webrtc-signaling-us.herokuapp.com",
+          ],
+        });
+      } catch (err) {}
+
+      const awareness = provider.awareness;
+      const val = randomHexColor();
+      awareness.setLocalStateField("user", {
+        name: username,
+        color: val,
+      });
+
+      const getBinding = new CodeMirrorBinding(yText, EditorRef, awareness, {
+        yUndoManager,
+      });
+
+      return () => {
+        if (provider) {
+          provider.disconnect();
+          ydoc.destroy();
+        }
+      };
+    }
+  }, [EditorRef]);
+
   return (
     <div className={`container editor-main ${classes.root}`}>
       <Grid container spacing={0}>
         <Grid item xs={12} sm={12} md={12} lg={12}>
           <div className="container_editor_area">
-            <CodeMirror
-              autoScroll
-              value={codeWritten}
-              height={500}
-              tabSize={2}
-              lineWrapping={true}
-              smartIndent={true}
-              lineNumbers={true}
-              foldGutter={true}
-              gutters={["CodeMirror-linenumbers", "CodeMirror-foldgutter"]}
-              autoCloseTags={true}
-              matchBrackets={true}
-              autoCloseBrackets={true}
-              extraKeys={{
-                "Ctrl-Space": "autocomplete",
+            <div
+              style={{
+                textAlign: "left",
+                width: "100%",
               }}
-              options={{
-                theme: "monokai",
-                keyMap: "sublime",
-                mode: languageObject.language,
-              }}
-              onChange={handleCodeChange}
-            />
+            >
+              <CodeMirror
+                autoScroll
+                options={{
+                  mode: setLanguageMode(languageObject.language)
+                    ? setLanguageMode(languageObject.language)
+                    : "text/x-c++src",
+                  theme: theme,
+                  keyMap: keybinds,
+                  lineWrapping: true,
+                  smartIndent: true,
+                  lineNumbers: true,
+                  foldGutter: true,
+                  height: 500,
+                  tabSize: 2,
+                  gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
+                  autoCloseTags: true,
+                  matchBrackets: true,
+                  autoCloseBrackets: true,
+                  extraKeys: {
+                    "Ctrl-Space": "autocomplete",
+                  },
+                }}
+                editorDidMount={(editor) => {
+                  handleEditorDidMount(editor);
+                  editor.setSize("100%", "100%");
+                }}
+                onChange={handleCodeChange}
+              />
+            </div>
           </div>
         </Grid>
       </Grid>
 
       <div className="button">
-        {/* <span id="start" onClick={submitCodeHandler}>
-              Submit
-        </span> */}
         <Button
           variant="contained"
           color="secondary"

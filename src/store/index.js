@@ -1,14 +1,25 @@
 import { configureStore, createSlice } from "@reduxjs/toolkit";
 
-// to switch tabs in a room
-const tempSlice = createSlice({
-  name: "switch",
+const codeEditorConfigSlice = createSlice({
+  name: "codeEditorConfig",
   initialState: {
-    tab: "text", //text,code,chat
+    language: "text/x-c++src",
+    fontSize: 18,
+    theme: "monokai",
+    keybinds: "sublime",
   },
   reducers: {
-    switchTab: (state, action) => {
-      state.tab = action.payload;
+    changeLang: (state, action) => {
+      state.language = action.payload;
+    },
+    changeFontSize: (state, action) => {
+      state.fontSize = action.payload;
+    },
+    changeTheme: (state, action) => {
+      state.theme = action.payload;
+    },
+    changeKeyBindings: (state, action) => {
+      state.keybinds = action.payload;
     },
   },
 });
@@ -16,9 +27,9 @@ const tempSlice = createSlice({
 // complete state store
 const store = configureStore({
   reducer: {
-    tab: tempSlice.reducer,
+    codeEditorConfig: codeEditorConfigSlice.reducer,
   },
 });
 
-export const tempActions = tempSlice.actions; // to change tab
+export const codeEditorConfigActions = codeEditorConfigSlice.actions;
 export default store;

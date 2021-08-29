@@ -17,3 +17,8 @@
 .MuiButtonBase-root{
   background-color: black;
 }
+
+.react-select-drops{
+  margin-left: 5px;
+  margin-right: 5px;
+}

@@ -15,6 +15,12 @@ import Box from "@material-ui/core/Box";
 import Grid from "@material-ui/core/Grid";
 import Select from "react-select";
 import languages from "../../data/languages";
+import themes from "../../data/themes";
+import keymaps from "../../data/keymaps";
+import { useDispatch } from "react-redux";
+import { codeEditorConfigActions } from "../../store/index";
+import clsx from "clsx";
+import { withStyles } from "@material-ui/core/styles";
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -60,6 +66,14 @@ const useStyles = makeStyles((theme) => ({
   selectEmpty: {
     marginTop: theme.spacing(2),
   },
+  buttons: {
+    // background: "linear-gradient(45deg, #FE6B8B 30%, #FF8E53 90%)",
+    // background:"black",
+    // borderRadius: 3,
+    // border: 0,
+    // color: "white",
+    // height: 48,
+  },
 }));
 
 const SwitchTab = () => {
@@ -67,10 +81,13 @@ const SwitchTab = () => {
   const classes = useStyles();
   const [value, setValue] = React.useState(0);
   const [languagesAvailable, setLanguagesAvailable] = useState([]);
+  const [themesAvailable, setThemesAvailable] = useState([]);
+  const [keyMapsAvailable, setKeyMapsAvailable] = useState([]);
   const [currentLang, setCurrentLang] = useState({});
+  const dispatch = useDispatch();
 
   useEffect(() => {
-    const transformedData = languages.map((lang) => {
+    const transformedlanguageData = languages.map((lang) => {
       return {
         value: lang.language,
         label: lang.language,
@@ -79,11 +96,31 @@ const SwitchTab = () => {
         pretext: lang.pretext,
       };
     });
-    setLanguagesAvailable(transformedData);
-    setCurrentLang(transformedData[11]);
+    setLanguagesAvailable(transformedlanguageData);
+    setCurrentLang(transformedlanguageData[11]);
   }, []);
 
-  const handleChange = (event, newValue) => {
+  useEffect(() => {
+    const transformedthemeData = themes.map((theme) => {
+      return {
+        value: theme,
+        label: theme,
+      };
+    });
+    setThemesAvailable(transformedthemeData);
+  }, []);
+
+  useEffect(() => {
+    const transformedKeyMapsData = keymaps.map((keymap) => {
+      return {
+        value: keymap,
+        label: keymap,
+      };
+    });
+    setKeyMapsAvailable(transformedKeyMapsData);
+  }, []);
+
+  const handleTabChange = (event, newValue) => {
     setValue(newValue);
   };
 
@@ -97,6 +134,14 @@ const SwitchTab = () => {
     });
   };
 
+  const themeChangeHandler = (e) => {
+    dispatch(codeEditorConfigActions.changeTheme(e.value));
+  };
+
+  const keymapsChangeHandler = (e) => {
+    dispatch(codeEditorConfigActions.changeKeyBindings(e.value));
+  };
+
   //move to home tab
   const goToHomeHandler = () => {
     history.push("/");
@@ -105,29 +150,50 @@ const SwitchTab = () => {
   return (
     <div className={`working-space ${classes.root}`}>
       <AppBar position="static">
-        <Tabs value={value} onChange={handleChange}>
+        <Tabs value={value} onChange={handleTabChange}>
           <Tab label="Text Editor" {...editorTabsProps(0)} />
           <Tab label="Code Editor" {...editorTabsProps(1)} />
         </Tabs>
       </AppBar>
       <TabPanel value={value} index={1}>
         <Grid container spacing={0}>
-          <Grid item xs={12} sm={6} md={2} lg={2}>
+          <Grid item xs={12} sm={3} md={2} lg={2}>
             <Button
               variant="contained"
               color="secondary"
               startIcon={<HomeIcon />}
               onClick={goToHomeHandler}
+              className={clsx(classes.buttons)}
             >
               Home
             </Button>
           </Grid>
-          <Grid item xs={12} sm={6} md={2} lg={2}>
-            <Select
-              onChange={languageChangeHandler}
-              defaultValue={languagesAvailable[11]}
-              options={languagesAvailable}
-            />
+          <Grid item xs={12} sm={3} md={2} lg={2}>
+            <div className="react-select-drops">
+              <Select
+                onChange={languageChangeHandler}
+                defaultValue={languagesAvailable[11]}
+                options={languagesAvailable}
+              />
+            </div>
+          </Grid>
+          <Grid item xs={12} sm={3} md={2} lg={2}>
+            <div className="react-select-drops">
+              <Select
+                onChange={themeChangeHandler}
+                defaultValue={themesAvailable[0]}
+                options={themesAvailable}
+              />
+            </div>
+          </Grid>
+          <Grid item xs={12} sm={3} md={2} lg={2}>
+            <div className="react-select-drops">
+              <Select
+                onChange={keymapsChangeHandler}
+                defaultValue={keyMapsAvailable[0]}
+                options={keyMapsAvailable}
+              />
+            </div>
           </Grid>
         </Grid>
         <CodeEditor language={currentLang} />

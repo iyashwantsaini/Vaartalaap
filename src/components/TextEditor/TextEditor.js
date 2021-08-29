@@ -79,7 +79,6 @@ const TextEditor = () => {
   useEffect(() => {
     if (socketRef.current == null || quill == null) return;
     socketRef.current.once("load-text-editor-data", (quillDataObject) => {
-      console.log(quillDataObject);
       quill.setContents(quillDataObject);
       quill.enable();
     });

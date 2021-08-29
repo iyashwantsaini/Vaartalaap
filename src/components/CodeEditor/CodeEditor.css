@@ -3,6 +3,14 @@
   padding: 0ex;
 }
 
+.CodeMirror-lines {
+  height: 500px;
+}
+
+.CodeMirror {
+  border-radius: 5px;
+}
+
 .header {
   display: block;
   font-size: 2em;
@@ -61,7 +69,7 @@
 .other-sections {
   box-shadow: 0 0 1px 0 rgb(0, 0, 0, 0.5);
   border-radius: 5px;
-  background-color: #000000;
+  background-color: #272822;
   margin-right: 10px;
   margin-top: 20px;
 }
@@ -70,6 +78,7 @@
   padding: 20px;
   color: white;
 }
+
 .other-sections textarea {
   color: white;
   font-size: 1em;
@@ -82,7 +91,8 @@
 }
 
 .cm-s-monokai.CodeMirror {
-  background-color: #000000;
+  background: black;
+  color: #f8f8f2;
 }
 
 #start {
