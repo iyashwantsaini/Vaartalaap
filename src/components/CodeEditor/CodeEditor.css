@@ -1,0 +1,125 @@
+.editor-main {
+  margin: 0;
+  padding: 0ex;
+}
+
+.header {
+  display: block;
+  font-size: 2em;
+  margin-block-start: 0.67em;
+  margin-block-end: 0.67em;
+  margin-inline-start: 0px;
+  margin-inline-end: 0px;
+  font-weight: bold;
+}
+
+.button {
+  display: block;
+  margin-block-end: 0.67em;
+  margin-inline-start: 0px;
+  margin-inline-end: 0px;
+}
+
+.select-tag {
+  padding: 7px 20px;
+  text-decoration: none;
+  background: #000;
+  color: #fff;
+  display: block;
+  margin-block-end: 0.67em;
+  margin-block-start: 1.7em;
+  margin-inline-start: 0px;
+  margin-inline-end: 0px;
+}
+
+.select-tag:hover {
+  background: linear-gradient(45deg, #e42b66, #e2433f);
+}
+
+.select-option {
+  display: inline-block;
+  padding: 7px 20px;
+  text-decoration: none;
+  background: #000;
+  color: #fff;
+  display: block;
+  margin-block-end: 0.67em;
+  margin-inline-start: 0px;
+  margin-inline-end: 0px;
+}
+
+.select-option:hover {
+  background: linear-gradient(45deg, #e2433f, #e2433f);
+}
+
+.grid-headers {
+  display: block;
+  font-size: 1em;
+  font-weight: bold;
+}
+
+.other-sections {
+  box-shadow: 0 0 1px 0 rgb(0, 0, 0, 0.5);
+  border-radius: 5px;
+  background-color: #000000;
+  margin-right: 10px;
+  margin-top: 20px;
+}
+
+.other-sections label {
+  padding: 20px;
+  color: white;
+}
+.other-sections textarea {
+  color: white;
+  font-size: 1em;
+  padding: 20px;
+  margin-top: 10px;
+}
+
+.container_editor_area {
+  margin: 1.2em 0;
+}
+
+.cm-s-monokai.CodeMirror {
+  background-color: #000000;
+}
+
+#start {
+  background: #000;
+  color: #000;
+  padding: 4px 8px;
+  position: relative;
+  border: 2px #000 solid;
+}
+
+body:not(.safari) #start:hover {
+  color: #000;
+  background: #000;
+  transition: 0.25s;
+  top: 4px;
+  left: 4px;
+  border: 2px #000 solid;
+}
+
+body:not(.safari) #start::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  border: 2px #000 solid;
+}
+
+body:not(.safari) #start:hover::after {
+  content: "";
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  border: 2px #000 solid;
+}
