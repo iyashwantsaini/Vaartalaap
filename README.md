@@ -9,10 +9,10 @@
 <h4 align="center">An Open Source Interview Plaform with Video Call Support (WebRTC) and a Realtime Collaborate Editor with Compiler (Piston)</h4>
 <br />
 
-![one](readme/createroom.png)
-![two](readme/texteditor.png)
-![two](readme/codeeditor1.png)
-![two](readme/codeeditor2.png)
+![one](readme/createroom.PNG)
+![two](readme/texteditor.PNG)
+![three](readme/codeeditor1.PNG)
+![four](readme/codeeditor2.PNG)
 
 ## 🚀 Features
 
