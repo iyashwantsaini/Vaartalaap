@@ -1,0 +1,20 @@
+{
+  "name": "@vaartalaap/shared",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    "./types": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo 'shared lint not configured yet'"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

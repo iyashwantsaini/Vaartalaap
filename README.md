@@ -1,72 +1,77 @@
-<h1 align="center">
-  <br>
-  <a href=""><img src="readme/favicon.ico" alt="logo" width="100"></a>
-  <br>
-    Vaartalaap
-  <br>
-</h1>
+# VAARTALAAP
 
-<h4 align="center">An Open Source Interview Plaform with Video Call Support (WebRTC) and a Realtime Collaborate Editor with Compiler (Piston)</h4>
-<br />
+> **Spin up a shareable room link in seconds. No login required for guests. Real-time code collaboration, whiteboard, and crystal clear audio/video.**
 
-![one](readme/createroom.PNG)
-![two](readme/texteditor.PNG)
-![three](readme/codeeditor1.PNG)
-![four](readme/codeeditor2.PNG)
+![Landing](docs/screenshots/landing.png)
 
-## 🚀 Features
+---
 
-- A high-performance general-purpose code execution engine called Piston enabling users to compile and execute code in 61 programming languages including C, C++, Python and JavaScript.
-- A Collaborative Text editor using Quill and solved the conflict while collaboration using Deltas and SocketIO.
-- Used simple-peer and peerjs to create a Mesh Network of users in the same room allowing them to make video and audio calls.
+## 💎 The Experience
 
-## 🔥 Getting Started
+Vaartalaap (Dialogue) is a bespoke interview portal designed for high-fidelity technical collaboration. It strips away the admin fuss and delivers a **NeoPop-infused**, dark-mode-first environment where code, ideas, and conversation flow seamlessly.
 
-#### Clone the repo
+### ✨ Key Features
 
-```
-git clone https://github.com/iyashwantsaini/Vaartalaap.git
-```
+- **Zero-Friction Entry**: No sign-ups for guests. Just share a UUID link.
+- **Real-Time Sync**: Every keystroke, stroke, and cursor movement is synchronized instantly via Socket.IO.
+- **Polyglot Sandbox**: Run code in 15+ languages using the Piston execution engine.
+- **Infinite Canvas**: A vector-based whiteboard for system design sketches.
+- **Markdown Notes**: Collaborative notepad for rubrics and feedback.
+- **Aesthetic UI**: Built with the CRED NeoPop design system for a tactile, premium feel.
 
-#### Install NPM packages
+---
 
-```
-npm install
-```
+## 📸 Visual Tour
 
-#### Start the react server
+### 1. The Code Pair
+*Syntax highlighting, multi-cursor support, and instant execution.*
+![Code Pair](docs/screenshots/codepair.png)
 
-```
-npm start
-```
+### 2. The Notes
+*Markdown-enabled shared scratchpad for interviewers and candidates.*
+![Notes](docs/screenshots/notes.png)
 
-## 🚀Technologies Used
+### 3. The Whiteboard
+*Vector drawing tools for architectural diagrams and flowcharts.*
+![Whiteboard](docs/screenshots/whiteboard.png)
 
-- [React.js](https://reactjs.org/)
-- [Node.js](https://nodejs.org/)
-- [WebRTC](https://webrtc.org/)
-- [PeerJS](https://peerjs.com/)
-- [Socket.IO](https://socket.io/)
-- [MongoDB](https://www.mongodb.com/)
-- [CodeMirror](https://codemirror.net/)
-- [Piston](https://github.com/engineer-man/piston)
+---
 
-## 📚 References
+## 🛠️ Tech Stack
 
-- https://codemirror.net/#features
-- https://quilljs.com/
-- https://webrtc.org/
-- https://github.com/engineer-man/piston
-- https://github.com/WebDevSimplified/google-docs-clone
-- https://github.com/atharmohammad/Code-N-Collab
-- https://github.com/Rishabh-malhotraa/caucus
+**Monorepo Structure**
+- **Client**: React, Vite, Styled Components, NeoPop, Framer Motion, Zustand.
+- **Server**: Node.js, Express, Socket.IO, MongoDB.
+- **Shared**: TypeScript types and utilities.
 
-## 📌 Contributors
+## 🚀 Getting Started
 
-<img src="https://avatars3.githubusercontent.com/u/21121279?s=460&u=f0450278b2b569c4443ab8ee03f9dff7015da5bf&v=4" width="100px;" alt="toofff"/><br />
+### Prerequisites
+- Node.js 20+
+- MongoDB (Local or Atlas)
 
-<a href="https://meyash.xyz/" style="margin-right:30px;"><img src="https://meyash.xyz/assets/icons/siteicon.png" width="25"></a>
-<a href="https://meyash.xyz/resume.pdf" style="margin-right:30px;"><img src="https://cdn.jsdelivr.net/npm/simple-icons@v3/icons/libreoffice.svg" width="25"></a> 
-<a href="https://www.linkedin.com/in/iyashwantsaini/" style="margin-right:30px;"><img src="https://cdn.jsdelivr.net/npm/simple-icons@v3/icons/linkedin.svg" width="25"></a>
-<a href="https://twitter.com/iyashwantsaini" style="margin-right:30px;"><img src="https://cdn.jsdelivr.net/npm/simple-icons@v3/icons/twitter.svg" width="25"></a>
-<a href="https://www.instagram.com/iyashwantsaini/" style="margin-right:30px;"><img src="https://cdn.jsdelivr.net/npm/simple-icons@v3/icons/instagram.svg" width="25"></a>
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/iyashwantsaini/Vaartalaap.git
+   cd Vaartalaap
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Configure Environment**
+   Create a `.env` file in `apps/server` (see `.env.example`).
+
+4. **Lift Off**
+   ```bash
+   npm run dev
+   ```
+   This spins up both the client (Vite) and server (Express) in parallel.
+
+---
+
+*Crafted with 🖤 by Yashwant Saini*
