@@ -82,30 +82,29 @@ export const CollabCodeEditor = ({
 
     // First-user seeding: only after we've heard back from the server's
     // initial sync, so we don't race with persisted state and end up
-    // duplicating content. We seed only when:
-    //   - the doc is *still* empty after sync (no other peer / no persisted
-    //     state to inherit from)
-    //   - we're not in read-only mode
-    //   - no other peer is currently present (awareness size <= 1)
-    // We also flag the doc with a meta key the moment we seed so a fast
-    // remount of the same component can't double-seed before the meta has
-    // propagated through Yjs's update pipeline.
+    // The doc is seeded with the language template ONLY if the server's
+    // canonical Y.Doc is currently empty. We DO NOT insert locally — when
+    // two tabs open the same fresh room simultaneously, both would find
+    // ytext empty after their initial sync (server has nothing to give)
+    // and both would insert the template, leaving a duplicated buffer
+    // after CRDT merge. Instead we delegate to the server, whose in-memory
+    // Y.Doc serialises the empty-check + insert atomically and broadcasts
+    // the resulting update to every peer (including us).
     let cancelled = false;
     if (!readOnly && seedIfEmpty) {
       void lease.synced.then(() => {
         if (cancelled) return;
         if (ytext.length !== 0) return;
-        if (lease.awareness.getStates().size > 1) return;
-        // Doc-level guard so two concurrent first-time mounts (e.g. tab
-        // change races) don't both insert the template.
+        // Doc-level guard so a fast remount of the same component doesn't
+        // re-emit the seed request once we've already attempted it for
+        // this Y.Doc instance.
         const meta = lease.doc.getMap("__meta__");
-        if (meta.get("seeded")) return;
-        lease.doc.transact(() => {
-          if (ytext.length === 0) {
-            ytext.insert(0, seedIfEmpty);
-            meta.set("seeded", true);
-          }
-        });
+        if (meta.get("seedRequested")) return;
+        meta.set("seedRequested", true);
+        lease.socket.emit(
+          "yjs:seed-if-empty",
+          { roomId, docName, textKey: "content", text: seedIfEmpty }
+        );
       });
     }
 

@@ -138,11 +138,19 @@ export const bootstrapSocket = (httpServer: HTTPServer) => {
 
     socket.on("room:join", async ({ roomId, participantId, displayName }: JoinRoomPayload) => {
       logger.info(`room:join from ${socket.id} for room ${roomId} participant ${participantId}`);
-      if (!roomId || !participantId) {
-        // Without a participantId we can't reliably clean up later, so refuse
-        // to track membership. The socket still joins the io room so it can
-        // receive broadcasts (read-only viewer).
-        socket.join(roomId);
+      if (!roomId) return;
+      // CRITICAL: socket.join must happen BEFORE any await. The client fires
+      // yjs:sync-request immediately after room:join (same tick), and
+      // socket.io does NOT pause event delivery while an async handler is
+      // suspended on await. If we joined the io room only after the Mongo
+      // round-trip below, sync-request would arrive with
+      // socket.rooms.has(roomId)===false and be silently dropped — leading
+      // to a 4s client fallback timeout, double-seed of the template, and
+      // diverged CRDT state across tabs.
+      socket.join(roomId);
+      if (!participantId) {
+        // Read-only viewer: receives broadcasts but can't be tracked for
+        // cleanup, so don't proceed with participant registration.
         return;
       }
       // Verify the room actually exists in Mongo. Without this check, anyone
@@ -151,20 +159,22 @@ export const bootstrapSocket = (httpServer: HTTPServer) => {
       const dbRoom = await roomService.getRoom(roomId);
       if (!dbRoom) {
         logger.warn(`room:join refused — unknown room ${roomId} from ${socket.id}`);
+        socket.leave(roomId);
         socket.emit("room:error", { code: "room_not_found", roomId });
+        return;
+      }
+      const alreadyIn = dbRoom.participants?.some((p) => p.id === participantId) ?? false;
+      if (!alreadyIn && (dbRoom.participants?.length ?? 0) >= MAX_PARTICIPANTS_PER_ROOM) {
+        logger.warn(`room:join refused — room ${roomId} full from ${socket.id}`);
+        socket.leave(roomId);
+        socket.emit("room:error", { code: "room_full", roomId });
         return;
       }
       // If the participant isn't in the DB any more (grace-period removal
       // after a brief disconnect), re-add them now. Without this, a network
       // blip / dev-HMR / mobile sleep silently turns the user into a ghost
       // — their socket is in the io room but they don't show in the roster.
-      const alreadyIn = dbRoom.participants?.some((p) => p.id === participantId) ?? false;
       if (!alreadyIn) {
-        if ((dbRoom.participants?.length ?? 0) >= MAX_PARTICIPANTS_PER_ROOM) {
-          logger.warn(`room:join refused — room ${roomId} full from ${socket.id}`);
-          socket.emit("room:error", { code: "room_full", roomId });
-          return;
-        }
         try {
           await roomService.joinRoom({
             roomId,
@@ -178,7 +188,6 @@ export const bootstrapSocket = (httpServer: HTTPServer) => {
           // the socket still receives broadcasts.
         }
       }
-      socket.join(roomId);
       // Idempotent: if this socket is already tracked for the room (e.g.
       // duplicate room:join from a reconnect), skip the ref bump.
       if (memberships.get(roomId) !== participantId) {
@@ -454,6 +463,60 @@ export const bootstrapSocket = (httpServer: HTTPServer) => {
         }
       } catch (err) {
         logger.error("yjs:sync-request failed", err);
+      }
+    });
+
+    // Server-side atomic template seed. The first user who joins an empty
+    // room would otherwise insert the language template locally, but in a
+    // truly simultaneous open two clients can BOTH find ytext empty after
+    // their initial sync (server has nothing to give them) and BOTH insert
+    // the template — Yjs then merges into a duplicated buffer. We fix this
+    // by routing the seed through the server: the in-memory Y.Doc check +
+    // insert is race-free (single-threaded), and we broadcast the resulting
+    // update to every peer in the room (including the requester so they
+    // pick up their own seed from the canonical doc).
+    socket.on("yjs:seed-if-empty", async (
+      payload: { roomId: string; docName: string; textKey: string; text: string },
+      ack?: (response: { seeded: boolean }) => void
+    ) => {
+      try {
+        const { roomId, docName, textKey, text } = payload || {};
+        if (!roomId || !docNameValid(docName) || !docNameValid(textKey)) {
+          ack?.({ seeded: false });
+          return;
+        }
+        if (!socket.rooms.has(roomId)) { ack?.({ seeded: false }); return; }
+        if (!socket.data.participantId) { ack?.({ seeded: false }); return; }
+        if (typeof text !== "string" || text.length === 0 || text.length > 100_000) {
+          ack?.({ seeded: false });
+          return;
+        }
+        // Track this docName against the room cap so a malicious client
+        // can't bypass MAX_DOCS_PER_ROOM by going through the seed path.
+        let docsForRoom = roomDocs.get(roomId);
+        if (!docsForRoom) {
+          docsForRoom = new Set<string>();
+          roomDocs.set(roomId, docsForRoom);
+        }
+        if (!docsForRoom.has(docName)) {
+          if (docsForRoom.size >= MAX_DOCS_PER_ROOM) {
+            ack?.({ seeded: false });
+            return;
+          }
+          docsForRoom.add(docName);
+        }
+        const update = await yjsService.seedIfEmpty(roomId, docName, textKey, text);
+        if (!update) {
+          ack?.({ seeded: false });
+          return;
+        }
+        // Broadcast to EVERY peer (io.to, not socket.to) so the requester
+        // also receives the canonical seed update via its yjs:update listener.
+        io.to(roomId).emit("yjs:update", { docName, update });
+        ack?.({ seeded: true });
+      } catch (err) {
+        logger.error("yjs:seed-if-empty failed", err);
+        ack?.({ seeded: false });
       }
     });
 

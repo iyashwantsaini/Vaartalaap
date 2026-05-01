@@ -98,6 +98,37 @@ class YjsService {
     return Y.encodeStateVector(doc);
   }
 
+  /**
+   * Atomically seed a Y.Text inside the doc if and only if it is currently
+   * empty. Returns the resulting binary update (encoded against an empty
+   * state vector) so the caller can broadcast it to every peer — including
+   * the requester, who otherwise wouldn't have the seed locally.
+   *
+   * This is the single source of truth for "first user picks the template":
+   * doing the empty-check + insert in one synchronous block on the in-memory
+   * Y.Doc is race-free (Node is single-threaded) and prevents the duplicate-
+   * seed problem when two tabs join an empty room simultaneously.
+   */
+  async seedIfEmpty(
+    roomId: string,
+    docName: string,
+    textKey: string,
+    text: string
+  ): Promise<Uint8Array | null> {
+    if (!text) return null;
+    if (text.length > MAX_DOC_BYTES) return null;
+    const doc = await this.getDoc(roomId, docName);
+    const ytext = doc.getText(textKey);
+    if (ytext.length > 0) return null;
+    const sv = Y.encodeStateVector(doc);
+    doc.transact(() => {
+      ytext.insert(0, text);
+    });
+    this.#schedulePersist(roomId, docName);
+    // Encode just the diff since the pre-seed state vector — small payload.
+    return Y.encodeStateAsUpdate(doc, sv);
+  }
+
   #schedulePersist(roomId: string, docName: string) {
     const key = this.#key(roomId, docName);
     const entry = this.#docs.get(key);
