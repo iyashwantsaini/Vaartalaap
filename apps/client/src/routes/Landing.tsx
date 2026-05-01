@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
@@ -13,6 +13,8 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
+import Alert from "@mui/material/Alert";
+import Collapse from "@mui/material/Collapse";
 import CodeIcon from "@mui/icons-material/Code";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import BrushIcon from "@mui/icons-material/Brush";
@@ -38,6 +40,30 @@ const FEATURES = [
 export const LandingRoute = () => {
   const navigate = useNavigate();
   const [joinCode, setJoinCode] = useState("");
+  const [isWaking, setIsWaking] = useState(false);
+
+  // Pre-warm the API on mount so the user's first interaction is snappy.
+  // If the ping takes >3s, surface a banner so they know we're waking the
+  // free-tier dyno (cold-start is ~30-50s on Render free).
+  useEffect(() => {
+    let cancelled = false;
+    const wakeTimer = window.setTimeout(() => {
+      if (!cancelled) setIsWaking(true);
+    }, 3000);
+    api
+      .pingHealth()
+      .catch(() => {
+        /* swallow — real errors will surface on the user's first action */
+      })
+      .finally(() => {
+        window.clearTimeout(wakeTimer);
+        if (!cancelled) setIsWaking(false);
+      });
+    return () => {
+      cancelled = true;
+      window.clearTimeout(wakeTimer);
+    };
+  }, []);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -90,6 +116,12 @@ export const LandingRoute = () => {
         maxWidth="md"
         sx={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", py: { xs: 6, md: 10 }, position: "relative", zIndex: 1, textAlign: "center" }}
       >
+        <Collapse in={isWaking} sx={{ width: "100%", maxWidth: 520, mb: 3 }}>
+          <Alert severity="info" variant="outlined">
+            Waking up the server… first request may take ~30 s on free tier.
+          </Alert>
+        </Collapse>
+
         <Typography variant="overline" color="primary" sx={{ mb: 2 }}>
           Interview &amp; learning platform
         </Typography>

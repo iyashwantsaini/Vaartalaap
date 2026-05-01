@@ -17,6 +17,11 @@ const parseResponse = async <T>(response: Response) => {
 };
 
 export const api = {
+  async pingHealth() {
+    const response = await fetch(`${resolveBaseUrl()}/health`);
+    if (!response.ok) throw new Error("Health check failed");
+    return response.json() as Promise<{ status: string }>;
+  },
   async createRoom(hostName?: string) {
     const response = await fetch(`${resolveBaseUrl()}/api/rooms`, {
       method: "POST",
