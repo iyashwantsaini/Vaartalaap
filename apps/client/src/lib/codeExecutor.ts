@@ -48,6 +48,9 @@ const setQuota = (next: Partial<ExecQuota>) => {
 
 const backend: ExecBackend = (import.meta.env.VITE_EXEC_BACKEND as ExecBackend) || "codex";
 const pistonUrl = (import.meta.env.VITE_PISTON_URL as string) || "https://emkc.org/api/v2/piston";
+// Judge0 is currently DISABLED — see runOnJudge0 / executeCode. Vars retained
+// so re-enabling later is a one-line change and the rest of the calling chain
+// stays untouched.
 const judge0Host = (import.meta.env.VITE_JUDGE0_HOST as string) || "judge0-ce.p.rapidapi.com";
 const judge0Key = (import.meta.env.VITE_JUDGE0_KEY as string) || "";
 const codexUrl = (import.meta.env.VITE_CODEX_URL as string) || "https://api.codex.jaagrav.in";
@@ -97,8 +100,11 @@ const updateQuotaFromHeaders = (headers: Headers) => {
   });
 };
 
-const runOnJudge0 = async (langValue: string, code: string, stdin: string): Promise<ExecResult> => {
-  if (!judge0Key) {
+const runOnJudge0 = async (langValue: string, code: string, stdin: string): Promise<ExecResult> => {  // Judge0 is disabled — bundling a RapidAPI key in the SPA would expose it to
+  // anyone reading our static JS. Leaving the implementation in place so it
+  // can be re-enabled (or moved server-side) without rewiring the chain.
+  return { output: "Judge0 backend is disabled in this build." };
+  // eslint-disable-next-line no-unreachable  if (!judge0Key) {
     return { output: "Judge0 API key missing.\nSet VITE_JUDGE0_KEY in apps/client/.env (sign up at https://rapidapi.com/judge0-official/api/judge0-ce)." };
   }
   const lang = languages.find((l) => l.value === langValue);
@@ -275,7 +281,8 @@ export const executeCode = async (
   stdin: string
 ): Promise<ExecResult> => {
   if (backend === "piston") return runOnPiston(language, code, stdin);
-  if (backend === "judge0") return runOnJudge0(language, code, stdin);
+  // Judge0 path is disabled — see runOnJudge0. Falls through to default chain.
+  // if (backend === "judge0") return runOnJudge0(language, code, stdin);
   if (backend === "agent") return runOnAgent(language, code, stdin);
   if (backend === "wandbox") return runOnWandbox(language, code, stdin);
 

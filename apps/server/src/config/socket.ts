@@ -21,6 +21,17 @@ const MAX_NOTES_BYTES = 50_000;   // 50 KB
 const MAX_OUTPUT_BYTES = 50_000;  // 50 KB
 const MAX_WHITEBOARD_STROKES = 500;
 
+// Mesh WebRTC + collab caps. Mirrors MAX_PARTICIPANTS_PER_ROOM in roomService
+// — enforced here too because socket clients can bypass the HTTP /join route
+// and fire `room:join` directly.
+const MAX_PARTICIPANTS_PER_ROOM = 5;
+// Anti-DoS for Yjs collab: per-socket rolling window on yjs:update.
+const YJS_UPDATES_PER_SEC = 50;
+const YJS_WINDOW_MS = 1000;
+// Cap distinct (roomId, docName) pairs the server will spin up per room.
+// Without this an attacker could allocate thousands of in-memory Y.Docs.
+const MAX_DOCS_PER_ROOM = 20;
+
 interface RtcSignalPayload {
   roomId: string;
   from: string;
@@ -56,6 +67,9 @@ export const bootstrapSocket = (httpServer: HTTPServer) => {
   // the same (room, pid) before the timer fires, we cancel the removal.
   const pendingRemovals = new Map<string, ReturnType<typeof setTimeout>>();
   const REMOVAL_GRACE_MS = 3000;
+  // Per-room set of doc names the server has already created Y.Docs for. Used
+  // to refuse new docNames once the per-room cap is hit (anti-DoS for #3).
+  const roomDocs = new Map<string, Set<string>>();
   const refKey = (roomId: string, pid: string) => `${roomId}::${pid}`;
   const acquireRef = (roomId: string, pid: string) => {
     const k = refKey(roomId, pid);
@@ -113,6 +127,9 @@ export const bootstrapSocket = (httpServer: HTTPServer) => {
     // removing the most-recently-joined room.
     const memberships = new Map<string, string>();
     socket.data.memberships = memberships;
+    // Rolling-window counter for yjs:update events from this socket.
+    let yjsWindowStart = 0;
+    let yjsWindowCount = 0;
 
     socket.on("room:join", async ({ roomId, participantId }: JoinRoomPayload) => {
       logger.info(`room:join from ${socket.id} for room ${roomId} participant ${participantId}`);
@@ -121,6 +138,23 @@ export const bootstrapSocket = (httpServer: HTTPServer) => {
         // to track membership. The socket still joins the io room so it can
         // receive broadcasts (read-only viewer).
         socket.join(roomId);
+        return;
+      }
+      // Verify the room actually exists in Mongo. Without this check, anyone
+      // could `socket.emit("room:join", { roomId: "<guess>" })` and then send
+      // chat / RTC / yjs traffic into rooms they were never invited to.
+      const dbRoom = await roomService.getRoom(roomId);
+      if (!dbRoom) {
+        logger.warn(`room:join refused — unknown room ${roomId} from ${socket.id}`);
+        socket.emit("room:error", { code: "room_not_found", roomId });
+        return;
+      }
+      // Capacity cap — socket clients can hit this path without going through
+      // POST /api/rooms/:id/join, so enforce here too.
+      const alreadyIn = dbRoom.participants?.some((p) => p.id === participantId) ?? false;
+      if (!alreadyIn && (dbRoom.participants?.length ?? 0) >= MAX_PARTICIPANTS_PER_ROOM) {
+        logger.warn(`room:join refused — room ${roomId} full from ${socket.id}`);
+        socket.emit("room:error", { code: "room_full", roomId });
         return;
       }
       socket.join(roomId);
@@ -410,6 +444,32 @@ export const bootstrapSocket = (httpServer: HTTPServer) => {
         if (!roomId || !docNameValid(docName) || !update) return;
         if (!socket.rooms.has(roomId)) return;
         if (!socket.data.participantId) return; // must have joined first
+        // Per-socket rate limit — prevents one client from pinning CPU /
+        // OOM'ing the 512 MB Render free dyno with a tight update loop.
+        const now = Date.now();
+        if (now - yjsWindowStart > YJS_WINDOW_MS) {
+          yjsWindowStart = now;
+          yjsWindowCount = 0;
+        }
+        if (++yjsWindowCount > YJS_UPDATES_PER_SEC) {
+          if (yjsWindowCount === YJS_UPDATES_PER_SEC + 1) {
+            logger.warn(`yjs:update rate-limit hit on ${socket.id} (${YJS_UPDATES_PER_SEC}/s)`);
+          }
+          return;
+        }
+        // Cap distinct docNames the server will allocate per room.
+        let docsForRoom = roomDocs.get(roomId);
+        if (!docsForRoom) {
+          docsForRoom = new Set<string>();
+          roomDocs.set(roomId, docsForRoom);
+        }
+        if (!docsForRoom.has(docName)) {
+          if (docsForRoom.size >= MAX_DOCS_PER_ROOM) {
+            logger.warn(`yjs:update refused — room ${roomId} hit MAX_DOCS_PER_ROOM`);
+            return;
+          }
+          docsForRoom.add(docName);
+        }
         const bytes = update instanceof Uint8Array ? update : new Uint8Array(update);
         await yjsService.applyUpdate(roomId, docName, bytes);
         // Relay to every other peer in the room. Sender already has the

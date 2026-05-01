@@ -2,7 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from "express"
 import rateLimit from "express-rate-limit";
 import createHttpError from "http-errors";
 import { z } from "zod";
-import { roomService } from "../services/roomService.js";
+import { roomService, RoomFullError } from "../services/roomService.js";
 
 const createRoomLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
@@ -62,7 +62,17 @@ const JoinRoomSchema = z.object({
   participantId: z.string().optional(),
 });
 
-roomRouter.post("/:roomId/join", async (req: Request, res: Response, next: NextFunction) => {
+// Per-IP limiter on join — the global 120/min is too loose for an endpoint
+// that writes to Mongo and can be flooded if a room link leaks.
+const joinRoomLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many join attempts, please slow down." },
+});
+
+roomRouter.post("/:roomId/join", joinRoomLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = JoinRoomSchema.parse(req.body);
     const room = await roomService.joinRoom({ 
@@ -75,6 +85,9 @@ roomRouter.post("/:roomId/join", async (req: Request, res: Response, next: NextF
     }
     res.status(200).json(room);
   } catch (error) {
+    if (error instanceof RoomFullError) {
+      return next(createHttpError(409, error.message));
+    }
     next(error);
   }
 });

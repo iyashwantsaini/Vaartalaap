@@ -29,6 +29,18 @@ interface UpdateDocumentsPayload {
   patch: Partial<Pick<RoomDocuments, "code" | "language" | "notes" | "whiteboard" | "codes" | "input" | "output">>;
 }
 
+// Hard cap on concurrent participants per room. Mesh WebRTC scales O(N²) so
+// a small cap protects everyone's browser from melting and prevents a single
+// attacker (with a leaked room link) from flooding 200 sockets to DoS peers.
+const MAX_PARTICIPANTS_PER_ROOM = 5;
+
+export class RoomFullError extends Error {
+  statusCode = 409;
+  constructor() {
+    super(`Room is full (max ${MAX_PARTICIPANTS_PER_ROOM} participants).`);
+  }
+}
+
 const DEFAULT_CODE = `#include <iostream>
 
 int main() {
@@ -114,6 +126,15 @@ class RoomService {
     if (existingRoom) {
       // If they exist, just return the room (or update details if needed)
       return normalizeRoom(existingRoom);
+    }
+
+    // Capacity check — read current room first to refuse new joiners once full.
+    // Cheap: rooms collection is tiny and we already need the doc for the
+    // existence check below anyway.
+    const currentRoom = await this.#collection().findOne({ roomId: payload.roomId });
+    if (!currentRoom) return null;
+    if ((currentRoom.participants?.length ?? 0) >= MAX_PARTICIPANTS_PER_ROOM) {
+      throw new RoomFullError();
     }
 
     const participant: ParticipantSummary = {
