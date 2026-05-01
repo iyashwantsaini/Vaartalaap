@@ -1,0 +1,25 @@
+# Render Blueprint — deploys the Vaartalaap API + WebSocket server.
+# Use: New + → Blueprint → connect this repo → Render reads this file.
+# Free tier: spins down after 15 min idle (~30s cold start). Upgrade to Starter
+# ($7/mo) to keep warm.
+services:
+  - type: web
+    name: vaartalaap-api
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: .
+    # Build the shared workspace first, then the server.
+    buildCommand: npm install --legacy-peer-deps && npm --workspace @vaartalaap/shared run build && npm --workspace @vaartalaap/server run build
+    startCommand: node apps/server/dist/index.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: MONGODB_URI
+        sync: false        # set in Render dashboard (mongodb+srv://…)
+      - key: CLIENT_ORIGIN
+        sync: false        # set to the Vercel URL, e.g. https://vaartalaap.vercel.app

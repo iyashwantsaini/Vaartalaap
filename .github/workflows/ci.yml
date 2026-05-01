@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm install --legacy-peer-deps
+      - run: npm --workspace @vaartalaap/shared run build
+      - run: npm --workspace @vaartalaap/server run build
+      - run: npm --workspace @vaartalaap/client run build
+        env:
+          VITE_API_BASE: https://example.invalid

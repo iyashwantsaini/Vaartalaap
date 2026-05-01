@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm --workspace @vaartalaap/shared run build && npm --workspace @vaartalaap/client run build",
+  "installCommand": "npm install --legacy-peer-deps",
+  "outputDirectory": "apps/client/dist",
+  "framework": null,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
