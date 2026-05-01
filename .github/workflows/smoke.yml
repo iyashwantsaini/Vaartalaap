@@ -1,0 +1,58 @@
+name: Daily smoke test
+
+# Hits the live API once a day to:
+#   1. Wake Render (no-op if already warm)
+#   2. Create a room → exercises Mongo write path
+#   3. Read it back → exercises Mongo read path
+#   4. Touch /health → confirms server is healthy
+# This also resets Atlas M0's 60-day "no-connections-pause" timer.
+#
+# NOTE: GitHub Actions cron is NOT reliable at <15 min intervals. Use
+# cron-job.org or UptimeRobot if you also want to prevent Render's 15-min
+# cold-start (free tier).
+
+on:
+  schedule:
+    - cron: "0 6 * * *"     # 06:00 UTC daily (~ 11:30 IST)
+  workflow_dispatch:        # allow manual run from Actions tab
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      API: https://vaartalaap-api-edao.onrender.com
+    steps:
+      - name: Wake / health check
+        run: |
+          set -e
+          echo "→ GET $API/health"
+          # Render free can take 30-50s to wake; allow generous timeout.
+          curl --fail --retry 3 --retry-delay 15 --max-time 90 \
+               -sS "$API/health" | tee /tmp/health.json
+          grep -q '"status":"ok"' /tmp/health.json
+
+      - name: Create a smoke-test room
+        id: create
+        run: |
+          set -e
+          echo "→ POST $API/api/rooms"
+          BODY=$(curl --fail --max-time 30 -sS \
+                 -X POST "$API/api/rooms" \
+                 -H "Content-Type: application/json" \
+                 -d '{}')
+          echo "$BODY" | tee /tmp/room.json
+          ROOM_ID=$(echo "$BODY" | grep -oE '"roomId":"[^"]+"' | head -1 | cut -d'"' -f4)
+          if [ -z "$ROOM_ID" ]; then
+            echo "::error::Could not extract roomId from response"
+            exit 1
+          fi
+          echo "room_id=$ROOM_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Read room back
+        run: |
+          set -e
+          echo "→ GET $API/api/rooms/${{ steps.create.outputs.room_id }}"
+          curl --fail --max-time 30 -sS \
+               "$API/api/rooms/${{ steps.create.outputs.room_id }}" \
+               | tee /tmp/read.json
+          grep -q "${{ steps.create.outputs.room_id }}" /tmp/read.json
