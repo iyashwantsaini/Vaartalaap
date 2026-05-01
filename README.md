@@ -28,6 +28,27 @@ flowchart LR
 
 ---
 
+## Screenshots
+
+| Light | Dark |
+|---|---|
+| ![Landing — light](docs/screenshots/01-landing-light.png) | ![Landing — dark](docs/screenshots/02-landing-dark.png) |
+| ![Room workspace — light](docs/screenshots/04-room-code-light.png) | ![Room workspace — dark](docs/screenshots/05-room-code-dark.png) |
+
+Lobby (handle picker before joining):
+
+![Room lobby](docs/screenshots/03-room-lobby-light.png)
+
+Notes (Tiptap rich-text, Yjs-synced):
+
+![Notes tab](docs/screenshots/07-room-notes-dark.png)
+
+Whiteboard (Canvas 2D, Socket.IO stroke broadcast):
+
+![Whiteboard](docs/screenshots/08-room-whiteboard-dark.png)
+
+---
+
 ## Repo layout
 
 ```
