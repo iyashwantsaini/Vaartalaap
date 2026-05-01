@@ -1,73 +1,131 @@
-# React + TypeScript + Vite
+# apps/client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 18 + Vite 5 SPA.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Component graph
 
-## React Compiler
+```mermaid
+flowchart TB
+  Main[main.tsx] --> CMP[ColorModeProvider]
+  CMP --> Router[BrowserRouter]
+  Router --> L[/Landing/]
+  Router --> R[/Room/]
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+  L --> Hero & CreateDialog & JoinDialog & ColorModeToggle
 
-## Expanding the ESLint configuration
+  R --> Lobby[RoomLobby]
+  R --> CW[CodeWorkbench]
+  R --> WB[Whiteboard]
+  R --> NP[Notepad]
+  R --> CH[ChatPanel]
+  R --> CL[CallPanel]
+  R --> CMT[ColorModeToggle]
+  R --> EQ[ExecQuotaChip]
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+  CW --> CCE[CollabCodeEditor]
+  CCE --> YJS[lib/yjs.ts]
+  YJS --> Sock[lib/socket.ts]
+  CH --> Sock
+  CL --> Sock
+  WB --> Sock
+  NP --> Sock
+  CW --> Exec[lib/codeExecutor.ts]
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Data flow per surface
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```mermaid
+flowchart LR
+  subgraph Code
+    K1[Keystroke] --> Y[Y.Text]
+    Y --> WS1[ws yjs:update]
+    WS1 -. broadcast .-> Y2[peer Y.Text]
+    Y -. debounce .-> Snap[doc:change snapshot]
+  end
+  subgraph Whiteboard
+    K2[Pointer] --> S[stroke ref]
+    S --> WS2[ws wb:stroke]
+    S --> CV[canvas redraw +<br/>resolveStrokeColor]
+  end
+  subgraph Notes
+    K3[Tiptap edit] -. 300ms .-> WS3[ws doc:change kind=notes]
+  end
+  subgraph Chat
+    K4[Send] --> WS4[ws chat:send]
+  end
 ```
+
+---
+
+## Theming
+
+```mermaid
+flowchart LR
+  Init{Init} --> LS[localStorage<br/>vaartalaap:color-mode]
+  Init --> OS[matchMedia<br/>prefers-color-scheme]
+  LS --> Mode((mode))
+  OS --> Mode
+  Mode --> Theme[buildMuiTheme(mode)]
+  Mode --> Doc[document.documentElement<br/>.dataset.colorMode]
+  Theme --> MUI[MUI components]
+  Doc --> Native[native chrome]
+
+  Hook[useColorMode] --> CW[CodeWorkbench]
+  CW --> CM[CodeMirror<br/>oneDark | defaultHighlightStyle]
+  Hook --> WB[Whiteboard<br/>canvasBg + auto-contrast]
+```
+
+`useColorMode().toggle()` flips and persists.
+
+---
+
+## Key local state
+
+| File | State | Purpose |
+|---|---|---|
+| `routes/Room.tsx` | `hasJoined`, `localParticipantId`, `userColor` | gates room UI; HSL-hash colour for cursors |
+| `lib/yjs.ts` | `Map<roomId+docName, Lease>` | refcounted Y.Doc + Awareness + socket pipe |
+| `lib/socket.ts` | singleton `io()` | shared across components |
+| `styles/ColorModeProvider.tsx` | `mode` | persisted theme |
+| `components/Whiteboard.tsx` | `strokes`, `scale`, `offset`, `activeColor` | local-first draw |
+
+---
+
+## Per-window identity
+
+```mermaid
+flowchart LR
+  Open[Open tab] --> Win{window.name set?}
+  Win -- no --> Gen[window.name = vaa-XXXXXX]
+  Win -- yes --> Use[reuse]
+  Gen --> Key[storageKey:<br/>vaartalaap:pid:roomId:window.name]
+  Use --> Key
+  Key --> PID[stable participantId<br/>per tab+room]
+```
+
+So two tabs of the same room never collide on participant id, and a refresh keeps the same id.
+
+---
+
+## Build / scripts
+
+| Command | What |
+|---|---|
+| `npm run dev` (root) | Vite dev :5173 + server :4000 |
+| `npm run build` | `vite build` |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint |
+
+---
+
+## Env
+
+```
+VITE_API_BASE=http://localhost:4000
+```
+
+Resolved by `lib/api.ts` and `lib/socket.ts` for REST + WS endpoints.

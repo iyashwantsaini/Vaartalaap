@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import styled, { keyframes } from "styled-components";
-import { Button } from "@cred/neopop-web/lib/components";
+import Button from "@mui/material/Button";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 
 interface JoinDialogProps {
   open: boolean;
@@ -9,7 +15,71 @@ interface JoinDialogProps {
   onSubmit: (roomCode: string, displayName: string) => void;
 }
 
-const Backdrop = styled.div<{ $open: boolean }>`
+export const JoinDialog = ({ open, mode = "join", onClose, onSubmit }: JoinDialogProps) => {
+  const [code, setCode] = useState("");
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      const timer = setTimeout(() => {
+        setCode(""); setName(""); setError(null);
+        inputRef.current?.focus();
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [open]);
+
+  const handleSubmit = () => {
+    if (mode === "join" && !code.trim()) return setError("Enter a valid room code");
+    if (!name.trim()) return setError("Enter your display name");
+    onSubmit(code.trim(), name.trim());
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{mode === "create" ? "Create a room" : "Enter room details"}</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          {mode === "create"
+            ? "Enter your name to start a new session as host."
+            : "Paste the UUID or vanity code and your name to drop directly into the room."}
+        </Typography>
+        <Stack spacing={2}>
+          {mode === "join" && (
+            <TextField
+              inputRef={inputRef}
+              label="Room Code"
+              placeholder="e.g. 0bb2..."
+              fullWidth
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+            />
+          )}
+          <TextField
+            inputRef={mode === "create" ? inputRef : undefined}
+            label="Your Name"
+            fullWidth
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
+            error={Boolean(error)}
+            helperText={error ?? ""}
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+        <Button variant="outlined" onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={handleSubmit}>
+          {mode === "create" ? "Create Room" : "Join Room"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
   position: fixed;
   inset: 0;
   background: rgba(4, 4, 5, 0.85);
@@ -134,10 +204,10 @@ export const JoinDialog = ({ open, mode = "join", onClose, onSubmit }: JoinDialo
         </div>
         {error && <Description style={{ color: "#f27272", marginTop: "0.65rem" }}>{error}</Description>}
         <Actions>
-          <Button variant="secondary" kind="flat" colorMode="dark" size="medium" onClick={onClose}>
+          <Button variant="ghost" size="md" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" kind="elevated" colorMode="dark" size="medium" onClick={handleSubmit}>
+          <Button variant="primary" size="md" onClick={handleSubmit}>
             {mode === "create" ? "Create Room" : "Join room"}
           </Button>
         </Actions>

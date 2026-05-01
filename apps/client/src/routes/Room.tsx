@@ -1,504 +1,153 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import styled from "styled-components";
+import AppBar from "@mui/material/AppBar";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import List from "@mui/material/List";
+import ListItem from "@mui/material/ListItem";
+import ListItemText from "@mui/material/ListItemText";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
+import Toolbar from "@mui/material/Toolbar";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import ExitToAppIcon from "@mui/icons-material/ExitToApp";
+import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
+import HomeIcon from "@mui/icons-material/Home";
+import LinkIcon from "@mui/icons-material/Link";
 import { nanoid } from "nanoid";
-import { Button } from "@cred/neopop-web/lib/components";
-import type { RoomSnapshot } from "@vaartalaap/shared";
+import type { RoomSnapshot, RoomTab } from "@vaartalaap/shared";
 import { api } from "../lib/api";
-import { getSocket, disconnectSocket } from "../lib/socket";
+import { getSocket } from "../lib/socket";
 import { languages } from "../lib/languages";
 import { CodeWorkbench } from "../components/CodeWorkbench";
 import { Whiteboard } from "../components/Whiteboard";
 import { CallPanel } from "../components/CallPanel";
+import { ChatPanel } from "../components/ChatPanel";
 import { Notepad } from "../components/Notepad";
+import { RoomLobby } from "../components/RoomLobby";
+import { ExecQuotaChip } from "../components/ExecQuotaChip";
+import { ColorModeToggle } from "../components/ColorModeToggle";
+import Snackbar from "@mui/material/Snackbar";
+import Alert from "@mui/material/Alert";
 
-const Canvas = styled.main`
-  min-height: 100vh;
-  background: ${({ theme }) => theme.colors.background};
-  padding: clamp(1.25rem, 3vw, 2.5rem);
-  color: ${({ theme }) => theme.colors.text};
-`;
-
-const RoomShell = styled.div`
-  max-width: 1600px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  height: 100%;
-`;
-
-const Header = styled.header`
-  display: flex;
-  height: 72px;
-  align-items: center;
-  justify-content: space-between;
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  margin: 0 -clamp(1.25rem, 3vw, 2.5rem);
-  padding: 0 clamp(1.25rem, 3vw, 2.5rem);
-  background: ${({ theme }) => theme.colors.surface};
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
-  box-shadow: ${({ theme }) => theme.shadows.elevated};
-
-  @media (max-width: 768px) {
-    height: auto;
-    padding: 0.75rem 1rem;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-`;
-
-const HeaderLeft = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  min-width: 0;
-  flex: 1;
-  margin-right: 1rem;
-  
-  @media (max-width: 768px) {
-    width: 100%;
-    justify-content: space-between;
-    margin-right: 0;
-  }
-`;
-
-const LogoButton = styled.button`
-  background: none;
-  border: none;
-  padding: 0;
-  color: ${({ theme }) => theme.colors.text};
-  font-family: ${({ theme }) => theme.fonts.heading};
-  font-weight: 800;
-  font-size: 1.25rem;
-  cursor: pointer;
-  letter-spacing: -0.02em;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: opacity 0.2s;
-  flex-shrink: 0;
-
-  &:hover {
-    opacity: 0.8;
-  }
-`;
-
-const Divider = styled.div`
-  width: 1px;
-  height: 24px;
-  background: ${({ theme }) => theme.colors.border};
-  flex-shrink: 0;
-  
-  @media (max-width: 768px) {
-    display: none;
-  }
-`;
-
-const RoomIdContainer = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-family: ${({ theme }) => theme.fonts.mono};
-  font-size: 0.85rem;
-  color: ${({ theme }) => theme.colors.textMuted};
-  min-width: 0;
-  flex: 1;
-
-  & > span {
-    flex-shrink: 0;
-    @media (max-width: 1024px) {
-      display: none;
-    }
-  }
-`;
-
-const RoomIdChip = styled.button`
-  background: ${({ theme }) => theme.colors.surfaceMuted};
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  border-radius: 0px;
-  padding: 0.35rem 0.75rem;
-  color: ${({ theme }) => theme.colors.text};
-  font-family: inherit;
-  font-size: inherit;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: all 0.2s;
-  overflow: hidden;
-  max-width: 100%;
-  min-width: 0;
-
-  &:hover {
-    border-color: ${({ theme }) => theme.colors.accent};
-    background: ${({ theme }) => theme.colors.surface};
-    box-shadow: 2px 2px 0px ${({ theme }) => theme.colors.accent};
-    transform: translate(-1px, -1px);
-  }
-
-  svg {
-    opacity: 0.5;
-    flex-shrink: 0;
-  }
-
-  &:hover svg {
-    opacity: 1;
-  }
-  
-  /* Truncate text inside */
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  
-  @media (max-width: 768px) {
-    max-width: 160px;
-    font-size: 0.75rem;
-  }
-`;
-
-const HeaderRight = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  flex-shrink: 0;
-
-  @media (max-width: 768px) {
-    width: 100%;
-    justify-content: space-between;
-    border-top: 1px solid ${({ theme }) => theme.colors.border};
-    padding-top: 0.75rem;
-  }
-`;
-
-const StatusIndicator = styled.div<{ $status: "loading" | "ready" | "error" }>`
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: ${({ theme }) => theme.colors.textMuted};
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-
-  &::before {
-    content: '';
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: ${({ $status, theme }) => 
-      $status === "ready" ? theme.colors.success : 
-      $status === "error" ? "#ff5d78" : 
-      theme.colors.accent};
-    box-shadow: 0 0 8px ${({ $status, theme }) => 
-      $status === "ready" ? theme.colors.success : 
-      $status === "error" ? "#ff5d78" : 
-      theme.colors.accent};
-  }
-`;
-
-const ContentGrid = styled.section`
-  display: grid;
-  grid-template-columns: 1fr minmax(320px, 360px);
-  gap: clamp(1.25rem, 3vw, 2rem);
-  align-items: start;
-
-  @media (max-width: 960px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const Sidebar = styled.aside`
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-`;
-
-const Panel = styled.div`
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  background: ${({ theme }) => theme.colors.surface};
-  padding: 1.75rem;
-  box-shadow: ${({ theme }) => theme.shadows.card};
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-`;
-
-const PanelTitle = styled.h2`
-  margin: 0;
-  font-size: 1.05rem;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
-  color: ${({ theme }) => theme.colors.text};
-  font-weight: 800;
-  border-bottom: 2px solid ${({ theme }) => theme.colors.accent};
-  padding-bottom: 0.5rem;
-  display: inline-block;
-  align-self: flex-start;
-`;
-
-const Field = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-`;
-
-const Label = styled.label`
-  font-size: 0.85rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: ${({ theme }) => theme.colors.textMuted};
-  font-weight: 600;
-`;
-
-const Input = styled.input`
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  background: ${({ theme }) => theme.colors.surfaceMuted};
-  color: ${({ theme }) => theme.colors.text};
-  padding: 0.85rem 1rem;
-  font-size: 1rem;
-  font-family: ${({ theme }) => theme.fonts.mono};
-  transition: all 0.2s ease;
-  
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme.colors.accent};
-    box-shadow: 4px 4px 0px ${({ theme }) => theme.colors.accent};
-    transform: translate(-2px, -2px);
-  }
-`;
-
-const ParticipantList = styled.ul`
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-`;
-
-const Participant = styled.li`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.65rem 0.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 0.95rem;
-`;
-
-const ParticipantRole = styled.span`
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  background: #333;
-  padding: 2px 6px;
-`;
-
-const Stage = styled.div`
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  background: ${({ theme }) => theme.colors.surfaceMuted};
-  padding: clamp(1.5rem, 3vw, 2.5rem);
-  height: 85vh;
-  min-height: 600px;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  box-shadow: ${({ theme }) => theme.shadows.card};
-  min-width: 0;
-
-  @media (max-width: 768px) {
-    min-height: 400px;
-    height: 75vh;
-    padding: 1rem;
-    gap: 1rem;
-  }
-`;
-
-const TabStrip = styled.div`
-  display: flex;
-  gap: 0.5rem;
-  
-  @media (max-width: 768px) {
-    gap: 0.25rem;
-  }
-`;
-
-const StageTab = styled.button`
-  flex: 1;
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.textMuted};
-  padding: 0.85rem 1rem;
-  font-size: 0.95rem;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-  font-weight: 600;
-
-  @media (max-width: 768px) {
-    padding: 0.6rem 0.25rem;
-    font-size: 0.75rem;
-    letter-spacing: 0.05em;
-  }
-
-  &[data-active="true"] {
-    border: 1px solid ${({ theme }) => theme.colors.accent};
-    background: ${({ theme }) => theme.colors.accent};
-    color: #000;
-    font-weight: 800;
-    box-shadow: 4px 4px 0px #fff;
-    transform: translate(-2px, -2px);
-  }
-  
-  &:hover:not([data-active="true"]) {
-    border-color: ${({ theme }) => theme.colors.text};
-    color: ${({ theme }) => theme.colors.text};
-    background: rgba(255, 255, 255, 0.05);
-  }
-`;
-
-const StageBody = styled.div`
-  flex: 1;
-  background: #000;
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  padding: 0;
-  color: ${({ theme }) => theme.colors.textMuted};
-  font-size: 0.95rem;
-  line-height: 1.6;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-height: 0;
-  min-width: 0;
-  box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
-`;
-
-const ErrorState = styled.div`
-  padding: 1.5rem;
-  border: 2px solid #ff5d78;
-  background: rgba(255, 93, 120, 0.1);
-  color: #ff5d78;
-  font-size: 0.95rem;
-  box-shadow: 4px 4px 0px #ff5d78;
-`;
-
-const JoinSessionWrapper = styled.div`
-  display: flex;
-  justify-content: center;
-  width: 100%;
-  margin-top: 0.5rem;
-`;
-
-const JoinSessionButton = styled.button`
-  width: 100%;
-  border: 1px solid ${({ theme }) => theme.colors.accent};
-  background: ${({ theme }) => theme.colors.accent};
-  color: #000;
-  padding: 0.85rem 1rem;
-  font-size: 0.95rem;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-weight: 800;
-  box-shadow: 4px 4px 0px #fff;
-  transform: translate(-2px, -2px);
-
-  &:hover {
-    background: #fff;
-    border-color: #fff;
-    box-shadow: 4px 4px 0px ${({ theme }) => theme.colors.accent};
-  }
-
-  &:active {
-    transform: translate(0, 0);
-    box-shadow: none;
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-  }
-`;
-
-const JoinedName = styled.div`
-  font-size: 1.1rem;
-  font-weight: bold;
-  color: #fff;
-`;
-
-const CopyIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-  </svg>
-);
+const MAX_OUTPUT_BYTES = 50_000;
 
 export const RoomRoute = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { roomId } = useParams<{ roomId: string }>();
   const state = location.state as { joined?: boolean; participantId?: string; displayName?: string } | null;
-  
+
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "ready" | "error" | "not-found">("loading");
   const [error, setError] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string>(() => {
     if (state?.displayName) return state.displayName;
-    return `Guest ${Math.floor(Math.random() * 10000)}`;
+    return localStorage.getItem("vaartalaap:displayName") ?? "";
   });
   const [isJoining, setIsJoining] = useState(false);
   const [hasJoined, setHasJoined] = useState(state?.joined ?? false);
   const [localParticipantId, setLocalParticipantId] = useState<string | undefined>(state?.participantId);
   const [isSocketReady, setIsSocketReady] = useState(false);
 
-  // Clear history state on mount so that a refresh treats the user as new
+  // Each user controls their own tab — not synced to server
+  const [activeTab, setActiveTab] = useState<RoomTab>("code");
+
+  // Toast for participant join/leave notifications
+  const [toast, setToast] = useState<{ message: string; severity: "info" | "success" | "warning" } | null>(null);
+  const knownParticipantsRef = useRef<Set<string>>(new Set());
+
+  // Stable per-participant colour for collaborative cursors. Derived from the
+  // participantId so the same user always gets the same colour across reloads
+  // and for every peer that sees them. We avoid storing it server-side to
+  // keep the participant schema small.
+  const userColor = useMemo(() => {
+    if (!localParticipantId) return "#7f7fff";
+    let h = 0;
+    for (let i = 0; i < localParticipantId.length; i += 1) {
+      h = (h * 31 + localParticipantId.charCodeAt(i)) >>> 0;
+    }
+    // Saturated, mid-bright HSL — readable on dark bg, distinct between users.
+    const hue = h % 360;
+    return `hsl(${hue}, 70%, 60%)`;
+  }, [localParticipantId]);
+
+  // Debounce timers for high-frequency doc changes
+  const codeDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notesDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const whiteboardDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear history state on mount so refresh treats user as new
   useEffect(() => {
     if (state?.joined) {
       window.history.replaceState({}, "");
     }
   }, []);
 
-  // Attach socket.io for realtime updates
+  // Clear debounce timers on unmount
   useEffect(() => {
-    if (!roomId) return;
+    return () => {
+      if (codeDebounce.current) clearTimeout(codeDebounce.current);
+      if (notesDebounce.current) clearTimeout(notesDebounce.current);
+      if (inputDebounce.current) clearTimeout(inputDebounce.current);
+      if (whiteboardDebounce.current) clearTimeout(whiteboardDebounce.current);
+    };
+  }, []);
+
+  // Sync local tab when room first loads
+  useEffect(() => {
+    if (room?.activeTab) {
+      setActiveTab(room.activeTab);
+    }
+  }, [room?.roomId]); // only on first load, not every activeTab update
+
+  // Socket: attach listeners, rejoin on reconnect
+  useEffect(() => {
+    if (!roomId || !localParticipantId) return;
 
     const socket = getSocket();
-
-    const joinPayload = { roomId, participantId: localParticipantId };
+    // Capture the room/participant for cleanup, so even if state changes
+    // during teardown we still emit a leave for the *exact* (roomId, pid)
+    // pair that was joined.
+    const joinedRoomId = roomId;
+    const joinedParticipantId = localParticipantId;
 
     const handleConnect = () => {
-      // client log for debugging socket join
-      console.log("[socket] connect, joining room", joinPayload);
-      socket.emit("room:join", joinPayload);
+      socket.emit("room:join", { roomId: joinedRoomId, participantId: joinedParticipantId });
       setIsSocketReady(true);
     };
 
     const handleDocumentsUpdated = (payload: { roomId: string; documents?: RoomSnapshot["documents"] }) => {
-      if (!payload || !payload.documents) {
-        console.warn("[socket] room:documents-updated with no documents payload", payload);
-        return;
-      }
-
-      const nextDocuments = payload.documents;
-
-      console.log("[socket] room:documents-updated", payload.roomId, {
-        hasCode: Boolean(nextDocuments.code),
-        hasNotes: Boolean(nextDocuments.notes),
-        strokes: nextDocuments.whiteboard?.length ?? 0,
-      });
-
+      if (!payload?.documents) return;
       setRoom((current) => {
         if (!current || current.roomId !== payload.roomId) return current;
-        return { ...current, documents: nextDocuments };
+        return { ...current, documents: payload.documents! };
       });
     };
 
     const handleParticipantsUpdated = (participants: RoomSnapshot["participants"]) => {
+      // Diff against previously known set to fire join/leave toasts
+      const known = knownParticipantsRef.current;
+      const next = new Set(participants.map((p) => p.id));
+      if (known.size > 0) {
+        for (const p of participants) {
+          if (!known.has(p.id) && p.id !== joinedParticipantId) {
+            setToast({ message: `${p.displayName} joined the room`, severity: "success" });
+          }
+        }
+        for (const id of known) {
+          if (!next.has(id) && id !== joinedParticipantId) {
+            setToast({ message: `Someone left the room`, severity: "info" });
+          }
+        }
+      }
+      knownParticipantsRef.current = next;
       setRoom((current) => {
         if (!current) return current;
         return { ...current, participants };
@@ -509,7 +158,6 @@ export const RoomRoute = () => {
     socket.on("room:documents-updated", handleDocumentsUpdated);
     socket.on("room:participants-update", handleParticipantsUpdated);
 
-    // Always attempt join once when effect runs, even if already connected
     if (socket.connected) {
       handleConnect();
     }
@@ -519,10 +167,20 @@ export const RoomRoute = () => {
       socket.off("room:documents-updated", handleDocumentsUpdated);
       socket.off("room:participants-update", handleParticipantsUpdated);
       setIsSocketReady(false);
-      disconnectSocket();
+      // Tell the server to drop us from THIS room only. The shared socket
+      // singleton stays alive for SPA navigation; without this, the server
+      // would only learn about the leave on full disconnect, leaving a
+      // ghost participant behind whenever the user navigates between rooms.
+      if (socket.connected) {
+        socket.emit("room:leave", { roomId: joinedRoomId });
+      }
+      // Reset the join-toast diff so we don't fire stale "joined" alerts
+      // when entering the next room.
+      knownParticipantsRef.current = new Set();
     };
   }, [roomId, localParticipantId]);
 
+  // Load room snapshot
   useEffect(() => {
     if (!roomId) return;
     const load = async () => {
@@ -530,24 +188,51 @@ export const RoomRoute = () => {
         setStatus("loading");
         const snapshot = await api.fetchRoom(roomId);
         setRoom(snapshot);
+        setActiveTab(snapshot.activeTab ?? "code");
         setStatus("ready");
       } catch (fetchError) {
-        setError(fetchError instanceof Error ? fetchError.message : "Unable to load room");
-        setStatus("error");
+        const msg = fetchError instanceof Error ? fetchError.message : "Unable to load room";
+        if (msg.toLowerCase().includes("not found") || msg.includes("404")) {
+          setStatus("not-found");
+        } else {
+          setError(msg);
+          setStatus("error");
+        }
       }
     };
     void load();
   }, [roomId]);
 
-  const handleJoin = async () => {
+  const handleJoin = async (username?: string) => {
     if (!roomId) return;
     try {
       setIsJoining(true);
-      const newParticipantId = nanoid();
-      const snapshot = await api.joinRoom(roomId, displayName || undefined, newParticipantId);
+      const name = username ?? displayName;
+      // Per-window identity:
+      //   sessionStorage is per-tab and survives reload, BUT it gets COPIED
+      //   when a window is duplicated ("Duplicate tab", "Open in new window",
+      //   window.open inheriting context). That makes two windows share the
+      //   same participantId, which makes the server treat them as one entry —
+      //   refreshing one window then nukes the other window's entry from the
+      //   participants list.
+      //
+      //   We disambiguate by tagging this window with a unique `window.name`
+      //   on first load. window.name is unique per window (not copied across
+      //   duplicates) and survives reload. We then key the per-room
+      //   participantId by that window tag so duplicated windows get their
+      //   own identity.
+      if (!window.name || !window.name.startsWith("vaa-")) {
+        window.name = `vaa-${nanoid(8)}`;
+      }
+      const storageKey = `vaartalaap:pid:${roomId}:${window.name}`;
+      const stored = sessionStorage.getItem(storageKey);
+      const newParticipantId = stored ?? nanoid();
+      if (!stored) sessionStorage.setItem(storageKey, newParticipantId);
+      const snapshot = await api.joinRoom(roomId, name || undefined, newParticipantId);
       setRoom(snapshot);
-      if (displayName.trim()) {
-        localStorage.setItem("vaartalaap:displayName", displayName.trim());
+      if (name.trim()) {
+        localStorage.setItem("vaartalaap:displayName", name.trim());
+        setDisplayName(name.trim());
       }
       setLocalParticipantId(newParticipantId);
       setHasJoined(true);
@@ -561,185 +246,246 @@ export const RoomRoute = () => {
 
   const participants = room?.participants ?? [];
 
+  // Room not found — dedicated error page
+  if (status === "not-found") {
+    return (
+      <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, bgcolor: "background.default" }}>
+        <Typography variant="h5" fontWeight={700}>Room not found</Typography>
+        <Typography color="text.secondary">The room <code>{roomId}</code> does not exist or has expired.</Typography>
+        <Button variant="contained" startIcon={<HomeIcon />} onClick={() => navigate("/")}>
+          Back to Home
+        </Button>
+      </Box>
+    );
+  }
+
+  // Generic error before room loaded
+  if (status === "error" && error && !room) {
+    return (
+      <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, bgcolor: "background.default" }}>
+        <Typography variant="h5" fontWeight={700}>Something went wrong</Typography>
+        <Typography color="text.secondary">{error}</Typography>
+        <Button variant="contained" startIcon={<HomeIcon />} onClick={() => navigate("/")}>
+          Back to Home
+        </Button>
+      </Box>
+    );
+  }
+
+  // Lobby gate until user has joined
+  if (!hasJoined) {
+    return (
+      <RoomLobby
+        roomId={roomId ?? ""}
+        onJoin={handleJoin}
+        isLoading={isJoining}
+        error={status === "error" ? error : null}
+      />
+    );
+  }
+
   return (
-    <Canvas>
-      <RoomShell>
-        <Header>
-          <HeaderLeft>
-            <LogoButton onClick={() => navigate("/")}>
-              VAARTALAAP
-            </LogoButton>
-            <Divider />
-            <RoomIdContainer>
-              <span>Room ID</span>
-              <RoomIdChip
-                onClick={() => {
-                  if (roomId) navigator.clipboard.writeText(roomId);
-                }}
-                title="Copy Room ID"
-              >
-                {roomId}
-                <CopyIcon />
-              </RoomIdChip>
-            </RoomIdContainer>
-          </HeaderLeft>
-          
-          <HeaderRight>
-            <StatusIndicator $status={status}>
-              {status === "ready" ? `${participants.length} Active` : status}
-            </StatusIndicator>
-            <Button
-              variant="secondary"
-              kind="flat"
-              size="small"
-              colorMode="dark"
-              onClick={() => navigate("/")}
+    <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column", bgcolor: "background.default" }}>
+      {/* App Bar */}
+      <AppBar position="static" elevation={0} sx={{ borderBottom: 1, borderColor: "divider" }}>
+        <Toolbar variant="dense" sx={{ gap: 1.5, minHeight: 52 }}>
+          <Button
+            color="inherit"
+            onClick={() => navigate("/")}
+            sx={{
+              p: 0,
+              minWidth: 0,
+              "&:hover": { bgcolor: "transparent" },
+            }}
+          >
+            <Typography
+              component="span"
+              sx={{
+                fontWeight: 900,
+                letterSpacing: "0.18em",
+                fontSize: "0.95rem",
+                background: "linear-gradient(135deg, #4f63ff 0%, #8b9eff 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+              }}
             >
-              Exit
-            </Button>
-          </HeaderRight>
-        </Header>
+              VAARTALAAP
+            </Typography>
+          </Button>
 
-        {status === "error" && error ? <ErrorState>{error}</ErrorState> : null}
+          <Tooltip title="Click to copy room ID">
+            <Chip
+              label={roomId}
+              size="small"
+              variant="outlined"
+              icon={<ContentCopyIcon sx={{ fontSize: "0.8rem !important" }} />}
+              onClick={() => {
+                if (!roomId) return;
+                navigator.clipboard.writeText(roomId).then(
+                  () => setToast({ message: "Room ID copied", severity: "success" }),
+                  () => setToast({ message: "Copy failed", severity: "warning" }),
+                );
+              }}
+              sx={{ fontFamily: "monospace", cursor: "pointer", maxWidth: 260, ml: 1 }}
+            />
+          </Tooltip>
 
-        <ContentGrid>
-          <Stage>
-            <TabStrip>
-              {(["code", "notes", "whiteboard"] as const).map((tabKey) => (
-                <StageTab
-                  key={tabKey}
-                  data-active={room?.activeTab === tabKey ? "true" : "false"}
-                  onClick={() => {
-                    if (!roomId || !room || room.activeTab === tabKey) return;
-                    
-                    // Allow local tab switching for guests
-                    setRoom({ ...room, activeTab: tabKey });
+          <Tooltip title="Copy invite link">
+            <Chip
+              label="LINK"
+              size="small"
+              variant="outlined"
+              icon={<LinkIcon sx={{ fontSize: "0.85rem !important" }} />}
+              onClick={() => {
+                if (!roomId) return;
+                const url = `${window.location.origin}/room/${roomId}`;
+                navigator.clipboard.writeText(url).then(
+                  () => setToast({ message: "Invite link copied", severity: "success" }),
+                  () => setToast({ message: "Copy failed", severity: "warning" }),
+                );
+              }}
+              sx={{ fontFamily: "monospace", cursor: "pointer", letterSpacing: "0.1em", fontWeight: 700 }}
+            />
+          </Tooltip>
 
-                    // Only emit change if joined
-                    if (isSocketReady && hasJoined) {
-                      const socket = getSocket();
-                      socket.emit("room:tab-change", { roomId, tab: tabKey });
-                    }
-                  }}
-                >
-                  {tabKey === "code" ? "Code" : tabKey === "notes" ? "Notes" : "Whiteboard"}
-                </StageTab>
-              ))}
-            </TabStrip>
-            <StageBody>
+          <Box sx={{ flex: 1 }} />
+
+          <ExecQuotaChip />
+
+          <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mr: 1 }}>
+            <FiberManualRecordIcon
+              sx={{
+                fontSize: "0.7rem",
+                color: status === "ready" ? "success.main" : status === "error" ? "error.main" : "primary.main",
+              }}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
+              {status === "ready" ? `${participants.length} online` : status}
+            </Typography>
+          </Stack>
+
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<ExitToAppIcon />}
+            onClick={() => navigate("/")}
+          >
+            Exit
+          </Button>
+          <ColorModeToggle />
+        </Toolbar>
+      </AppBar>
+
+      <Box sx={{ flex: 1, p: { xs: 1.5, md: 2.5 }, maxWidth: 1600, mx: "auto", width: "100%", display: "flex", flexDirection: "column", gap: 2 }}>
+        <Box sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", md: "1fr minmax(300px, 340px)" },
+          gap: 2,
+          alignItems: "start",
+        }}>
+          {/* Stage */}
+          <Paper
+            variant="outlined"
+            sx={{
+              height: { xs: "75vh", md: "85vh" },
+              minHeight: 400,
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+              bgcolor: "background.paper",
+            }}
+          >
+            <Tabs
+              value={activeTab}
+              onChange={(_, val: RoomTab) => setActiveTab(val)}
+              sx={{
+                borderBottom: 1,
+                borderColor: "divider",
+                px: 1,
+                minHeight: 44,
+                "& .MuiTab-root": {
+                  textTransform: "uppercase",
+                  letterSpacing: "0.14em",
+                  fontWeight: 700,
+                  fontSize: "0.78rem",
+                  minHeight: 44,
+                },
+                "& .Mui-selected": {
+                  color: "primary.main",
+                },
+              }}
+            >
+              <Tab label="Code" value="code" />
+              <Tab label="Notes" value="notes" />
+              <Tab label="Whiteboard" value="whiteboard" />
+            </Tabs>
+
+            <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", bgcolor: "#000" }}>
               {room ? (
-                room.activeTab === "code" ? (
+                activeTab === "code" ? (
                   <CodeWorkbench
                     value={room.documents?.code ?? ""}
                     language={room.documents?.language ?? "cpp"}
                     input={room.documents?.input ?? ""}
                     output={room.documents?.output ?? ""}
                     readOnly={!hasJoined}
+                    roomId={hasJoined ? roomId : undefined}
+                    userName={displayName || "Guest"}
+                    userColor={userColor}
                     onChange={(next) => {
                       if (!roomId || !isSocketReady || !room?.documents) return;
-                      const socket = getSocket();
                       const currentLang = room.documents.language;
-                      
-                      console.log("[socket] emit room:doc-change code", roomId);
-                      socket.emit("room:doc-change", {
-                        roomId,
-                        patch: { 
-                          code: next,
-                          codes: { [currentLang]: next }
-                        },
-                      });
                       setRoom((current) => {
                         if (!current) return current;
-                        return {
-                          ...current,
-                          documents: {
-                            ...current.documents,
-                            code: next,
-                            codes: {
-                              ...current.documents.codes,
-                              [currentLang]: next,
-                            },
-                          },
-                        };
+                        return { ...current, documents: { ...current.documents, code: next, codes: { ...current.documents.codes, [currentLang]: next } } };
                       });
+                      if (codeDebounce.current) clearTimeout(codeDebounce.current);
+                      codeDebounce.current = setTimeout(() => {
+                        getSocket().emit("room:doc-change", { roomId, patch: { code: next, codes: { [currentLang]: next } } });
+                      }, 300);
                     }}
                     onLanguageChange={(next) => {
                       if (!roomId || !isSocketReady || !room?.documents) return;
-                      
-                      const nextLang = next;
-                      let nextCode = room.documents.codes?.[nextLang] || "";
-                      
+                      let nextCode = room.documents.codes?.[next] || "";
                       if (!nextCode) {
-                          const langConfig = languages.find(l => l.value === nextLang);
-                          if (langConfig) nextCode = langConfig.template;
+                        const langConfig = languages.find((l) => l.value === next);
+                        if (langConfig) nextCode = langConfig.template;
                       }
-
-                      const socket = getSocket();
-                      console.log("[socket] emit room:doc-change language", roomId, next);
-                      socket.emit("room:doc-change", {
-                        roomId,
-                        patch: { 
-                            language: nextLang,
-                            code: nextCode,
-                            codes: { [nextLang]: nextCode }
-                        },
-                      });
+                      getSocket().emit("room:doc-change", { roomId, patch: { language: next, code: nextCode, codes: { [next]: nextCode } } });
                       setRoom((current) => {
                         if (!current) return current;
-                        return { 
-                            ...current, 
-                            documents: { 
-                                ...current.documents, 
-                                language: nextLang,
-                                code: nextCode,
-                                codes: {
-                                    ...current.documents.codes,
-                                    [nextLang]: nextCode
-                                }
-                            } 
-                        };
+                        return { ...current, documents: { ...current.documents, language: next, code: nextCode, codes: { ...current.documents.codes, [next]: nextCode } } };
                       });
                     }}
                     onInputChange={(next) => {
                       if (!roomId || !isSocketReady) return;
-                      const socket = getSocket();
-                      console.log("[socket] emit room:doc-change input", roomId);
-                      socket.emit("room:doc-change", {
-                        roomId,
-                        patch: { input: next },
-                      });
-                      setRoom((current) =>
-                        current ? { ...current, documents: { ...current.documents, input: next } } : current,
-                      );
+                      setRoom((c) => c ? { ...c, documents: { ...c.documents, input: next } } : c);
+                      if (inputDebounce.current) clearTimeout(inputDebounce.current);
+                      inputDebounce.current = setTimeout(() => {
+                        getSocket().emit("room:doc-change", { roomId, patch: { input: next } });
+                      }, 300);
                     }}
                     onOutputChange={(next) => {
                       if (!roomId || !isSocketReady) return;
-                      const socket = getSocket();
-                      console.log("[socket] emit room:doc-change output", roomId);
-                      socket.emit("room:doc-change", {
-                        roomId,
-                        patch: { output: next },
-                      });
-                      setRoom((current) =>
-                        current ? { ...current, documents: { ...current.documents, output: next } } : current,
-                      );
+                      const capped = next.length > MAX_OUTPUT_BYTES
+                        ? next.slice(0, MAX_OUTPUT_BYTES) + "\n[output truncated]"
+                        : next;
+                      getSocket().emit("room:doc-change", { roomId, patch: { output: capped } });
+                      setRoom((c) => c ? { ...c, documents: { ...c.documents, output: capped } } : c);
                     }}
                   />
-                ) : room.activeTab === "notes" ? (
+                ) : activeTab === "notes" ? (
                   <Notepad
                     value={room.documents?.notes ?? ""}
                     readOnly={!hasJoined}
                     onChange={(next) => {
                       if (!roomId || !isSocketReady) return;
-                      const socket = getSocket();
-                      console.log("[socket] emit room:doc-change notes", roomId);
-                      socket.emit("room:doc-change", {
-                        roomId,
-                        patch: { notes: next },
-                      });
-                      setRoom((current) =>
-                        current ? { ...current, documents: { ...current.documents, notes: next } } : current,
-                      );
+                      setRoom((c) => c ? { ...c, documents: { ...c.documents, notes: next } } : c);
+                      if (notesDebounce.current) clearTimeout(notesDebounce.current);
+                      notesDebounce.current = setTimeout(() => {
+                        getSocket().emit("room:doc-change", { roomId, patch: { notes: next } });
+                      }, 300);
                     }}
                   />
                 ) : (
@@ -748,73 +494,91 @@ export const RoomRoute = () => {
                     readOnly={!hasJoined}
                     onStrokesChange={(next) => {
                       if (!roomId || !isSocketReady) return;
-                      const socket = getSocket();
-                      console.log("[socket] emit room:doc-change whiteboard", roomId, "strokes", next.length);
-                      socket.emit("room:doc-change", {
-                        roomId,
-                        patch: { whiteboard: next },
-                      });
-                      setRoom((current) =>
-                        current ? { ...current, documents: { ...current.documents, whiteboard: next } } : current,
-                      );
+                      setRoom((c) => c ? { ...c, documents: { ...c.documents, whiteboard: next } } : c);
+                      if (whiteboardDebounce.current) clearTimeout(whiteboardDebounce.current);
+                      whiteboardDebounce.current = setTimeout(() => {
+                        getSocket().emit("room:doc-change", { roomId, patch: { whiteboard: next } });
+                      }, 150);
                     }}
                   />
                 )
               ) : (
-                <p>Loading room telemetry...</p>
+                <Box sx={{ p: 3, color: "text.secondary" }}>Loading room…</Box>
               )}
-            </StageBody>
-          </Stage>
+            </Box>
+          </Paper>
 
-          <Sidebar>
-            <Panel>
-              <PanelTitle>Identity</PanelTitle>
-              {!hasJoined ? (
-                <>
-                  <Field>
-                    <Label htmlFor="displayName">Display Name</Label>
-                    <Input
-                      id="displayName"
-                      placeholder="e.g. PRINCIPAL CANDIDATE"
-                      value={displayName}
-                      onChange={(event) => setDisplayName(event.target.value)}
-                    />
-                  </Field>
-                  <JoinSessionWrapper>
-                    <JoinSessionButton
-                      onClick={handleJoin}
-                      disabled={isJoining || !roomId}
-                    >
-                      {isJoining ? "Joining room..." : "Join session"}
-                    </JoinSessionButton>
-                  </JoinSessionWrapper>
-                </>
-              ) : (
-                <Field>
-                  <Label>Joined as</Label>
-                  <JoinedName>
-                    {displayName || "Guest"}
-                  </JoinedName>
-                </Field>
-              )}
-            </Panel>
+          {/* Sidebar */}
+          <Stack spacing={2}>
+            <Paper variant="outlined" sx={{ p: 2.5, bgcolor: "background.paper" }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  display: "block",
+                  mb: 1.25,
+                  fontWeight: 800,
+                  letterSpacing: "0.18em",
+                  textTransform: "uppercase",
+                  fontSize: "0.68rem",
+                  background: "linear-gradient(135deg, #4f63ff 0%, #8b9eff 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}
+              >
+                Participants · {participants.length}
+              </Typography>
+              <List dense disablePadding>
+                {participants.length === 0 && (
+                  <ListItem disablePadding>
+                    <ListItemText secondary="Waiting for others to join…" />
+                  </ListItem>
+                )}
+                {participants.map((p) => {
+                  const isYou = p.id === localParticipantId;
+                  return (
+                    <ListItem key={p.id} disablePadding sx={{ py: 0.25 }}>
+                      <FiberManualRecordIcon
+                        sx={{ fontSize: "0.55rem", color: "success.main", mr: 1 }}
+                      />
+                      <ListItemText
+                        primary={
+                          <Stack direction="row" spacing={1} alignItems="baseline">
+                            <Typography variant="body2" fontWeight={isYou ? 700 : 400}>
+                              {p.displayName}
+                            </Typography>
+                            {isYou && (
+                              <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em" }}>
+                                you
+                              </Typography>
+                            )}
+                          </Stack>
+                        }
+                      />
+                    </ListItem>
+                  );
+                })}
+              </List>
+            </Paper>
 
-            <Panel>
-              <PanelTitle>Participants</PanelTitle>
-              <ParticipantList>
-                {participants.length === 0 && <Participant>Room is empty</Participant>}
-                {participants.map((participant) => (
-                  <Participant key={participant.id}>
-                    <span>{participant.displayName}</span>
-                  </Participant>
-                ))}
-              </ParticipantList>
-            </Panel>
+            {roomId && hasJoined && <CallPanel roomId={roomId} localDisplayName={displayName} localParticipantId={localParticipantId} participants={participants} />}
+            {roomId && hasJoined && <ChatPanel roomId={roomId} localParticipantId={localParticipantId} participants={participants} />}
+          </Stack>
+        </Box>
+      </Box>
 
-            {roomId && hasJoined && <CallPanel roomId={roomId} />}
-          </Sidebar>
-        </ContentGrid>
-      </RoomShell>
-    </Canvas>
+      <Snackbar
+        open={!!toast}
+        autoHideDuration={3000}
+        onClose={() => setToast(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+      >
+        {toast ? (
+          <Alert severity={toast.severity} variant="filled" onClose={() => setToast(null)} sx={{ width: "100%" }}>
+            {toast.message}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
+    </Box>
   );
 };

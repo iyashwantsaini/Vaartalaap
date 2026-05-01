@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import styled from "styled-components";
+import Box from "@mui/material/Box";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
+import { useTheme } from "@mui/material/styles";
 import type { RoomWhiteboardStroke } from "@vaartalaap/shared";
 import { ConfirmationDialog } from "./ConfirmationDialog";
 
@@ -116,121 +119,6 @@ const CloseIcon = () => (
   </svg>
 );
 
-const CanvasShell = styled.div`
-  position: relative;
-  flex: 1;
-  background: #000;
-  overflow: hidden;
-`;
-
-const CanvasElement = styled.canvas`
-  width: 100%;
-  height: 100%;
-  cursor: crosshair;
-`;
-
-const Toolbar = styled.div`
-  position: absolute;
-  top: 1rem;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 0.5rem;
-  padding: 0.5rem;
-  background: ${({ theme }) => theme.colors.surface};
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  border-radius: 0px;
-  box-shadow: ${({ theme }) => theme.shadows.card};
-  z-index: 10;
-  
-  max-width: 90%;
-  overflow-x: auto;
-  
-  /* Hide scrollbar */
-  &::-webkit-scrollbar {
-    display: none;
-  }
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-
-  @media (max-width: 768px) {
-    gap: 0.25rem;
-    padding: 0.35rem;
-    justify-content: flex-start;
-  }
-`;
-
-const ToolButton = styled.button<{
-  $active?: boolean;
-  $color?: string;
-  $textColor?: string;
-}>`
-  width: 2rem;
-  height: 2rem;
-  border-radius: 0px;
-  border: 2px solid
-    ${({ theme, $active }) => ($active ? theme.colors.text : "transparent")};
-  background: ${({ $color, theme }) => $color || theme.colors.surfaceMuted};
-  color: ${({ theme, $textColor }) => $textColor || theme.colors.text};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 1rem;
-  flex-shrink: 0;
-
-  &:hover {
-    transform: scale(1.1);
-    box-shadow: 2px 2px 0px ${({ theme }) => theme.colors.text};
-  }
-
-  @media (max-width: 768px) {
-    width: 1.75rem;
-    height: 1.75rem;
-    
-    svg {
-      width: 16px;
-      height: 16px;
-    }
-  }
-`;
-
-const Separator = styled.div`
-  width: 1px;
-  background: #333;
-  margin: 0 4px;
-`;
-
-const ExpandedOverlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: #000;
-  z-index: 2000;
-  display: flex;
-  flex-direction: column;
-`;
-
-const ExpandedHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 2rem;
-  background: ${({ theme }) => theme.colors.surface};
-  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
-  color: ${({ theme }) => theme.colors.text};
-`;
-
-const HeaderTitle = styled.h2`
-  margin: 0;
-  font-size: 1.2rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-`;
-
 interface WhiteboardProps {
   strokes: RoomWhiteboardStroke[];
   readOnly?: boolean;
@@ -238,16 +126,23 @@ interface WhiteboardProps {
 }
 
 const COLORS = [
-  "#ffffff", // White
   "#ff5d78", // Red
   "#0fb56d", // Green
   "#2979ff", // Blue
   "#ffeb3b", // Yellow
+  "#b388ff", // Purple
 ];
 
 export const Whiteboard = ({ strokes, readOnly = false, onStrokesChange }: WhiteboardProps) => {
+  const muiTheme = useTheme();
+  const isDark = muiTheme.palette.mode === "dark";
+  const canvasBg = isDark ? "#0a0a0f" : "#ffffff";
+  // Default ink is a vivid blue that has strong contrast against BOTH
+  // light and dark canvas backgrounds — so collaborators never lose track of
+  // strokes when someone else flips the theme.
+  const defaultInk = "#2979ff";
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [activeColor, setActiveColor] = useState("#ffffff");
+  const [activeColor, setActiveColor] = useState(defaultInk);
   const [isEraser, setIsEraser] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [scale, setScale] = useState(1);
@@ -277,13 +172,13 @@ export const Whiteboard = ({ strokes, readOnly = false, onStrokesChange }: White
       const context = canvas.getContext("2d");
       if (!context) return;
       context.scale(window.devicePixelRatio, window.devicePixelRatio);
-      drawAllStrokes(context, strokes, rect.width, rect.height, scale, offset);
+      drawAllStrokes(context, strokes, rect.width, rect.height, scale, offset, canvasBg);
     };
 
     resize();
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
-  }, [strokes, scale, offset, isExpanded]);
+  }, [strokes, scale, offset, isExpanded, canvasBg]);
 
   const startStroke = (event: React.MouseEvent<HTMLCanvasElement>) => {
     if (readOnly && !isPanning) return;
@@ -307,7 +202,7 @@ export const Whiteboard = ({ strokes, readOnly = false, onStrokesChange }: White
 
     const stroke: RoomWhiteboardStroke = {
       id: crypto.randomUUID(),
-      color: isEraser ? "#000000" : activeColor,
+      color: isEraser ? canvasBg : activeColor,
       width: isEraser ? 24 / scale : 3 / scale,
       points: [{ x: worldX, y: worldY }],
     };
@@ -343,7 +238,7 @@ export const Whiteboard = ({ strokes, readOnly = false, onStrokesChange }: White
     
     // Redraw everything to handle pan/zoom correctly during draw
     // Optimization: In a real app, we might want to layer canvases
-    drawAllStrokes(context, strokes, rect.width, rect.height, scale, offset);
+    drawAllStrokes(context, strokes, rect.width, rect.height, scale, offset, canvasBg);
     
     // Draw current stroke
     const pts = drawingRef.current.stroke.points;
@@ -353,7 +248,7 @@ export const Whiteboard = ({ strokes, readOnly = false, onStrokesChange }: White
     context.translate(offset.x, offset.y);
     context.scale(scale, scale);
     
-    context.strokeStyle = drawingRef.current.stroke.color;
+    context.strokeStyle = resolveStrokeColor(drawingRef.current.stroke.color, canvasBg);
     context.lineWidth = drawingRef.current.stroke.width;
     context.lineCap = "round";
     context.beginPath();
@@ -411,74 +306,74 @@ export const Whiteboard = ({ strokes, readOnly = false, onStrokesChange }: White
     setIsClearDialogOpen(false);
   };
 
-  const content = (
-    <CanvasShell style={isExpanded ? { border: 'none' } : {}}>
-      <Toolbar>
-        <ToolButton
-          $active={isPanning}
-          onClick={() => {
-            setIsPanning(true);
-            setIsEraser(false);
-          }}
-          title="Pan Tool"
-        >
+  const toolbarContent = (
+    <Box
+      sx={{
+        position: "absolute", top: "1rem", left: "50%", transform: "translateX(-50%)",
+        display: "flex", gap: 0.5, p: 0.5, bgcolor: "background.paper",
+        border: "1px solid", borderColor: "divider", zIndex: 10,
+        maxWidth: "90%", overflowX: "auto",
+        "&::-webkit-scrollbar": { display: "none" }, msOverflowStyle: "none", scrollbarWidth: "none",
+      }}
+    >
+      <Tooltip title="Pan Tool">
+        <IconButton size="small" onClick={() => { setIsPanning(true); setIsEraser(false); }} color={isPanning ? "primary" : "default"}>
           <HandIcon />
-        </ToolButton>
-        <Separator />
-        <ToolButton
-          onClick={() => setScale(s => Math.min(s * 1.2, 5))}
-          title="Zoom In"
-        >
-          <ZoomInIcon />
-        </ToolButton>
-        <ToolButton
-          onClick={() => setScale(s => Math.max(s / 1.2, 0.1))}
-          title="Zoom Out"
-        >
-          <ZoomOutIcon />
-        </ToolButton>
-        {!readOnly && (
-          <>
-            <Separator />
-            {COLORS.map((color) => (
-              <ToolButton
-                key={color}
-                $color={color}
-                $active={!isEraser && !isPanning && activeColor === color}
-                onClick={() => {
-                  setActiveColor(color);
-                  setIsEraser(false);
-                  setIsPanning(false);
-                }}
-                title="Color"
-              />
-            ))}
-            <Separator />
-            <ToolButton
-              $active={isEraser}
-              onClick={() => {
-                setIsEraser(true);
-                setIsPanning(false);
+        </IconButton>
+      </Tooltip>
+      <Box sx={{ width: "1px", bgcolor: "divider", mx: 0.5, flexShrink: 0, alignSelf: "stretch" }} />
+      <Tooltip title="Zoom In">
+        <IconButton size="small" onClick={() => setScale((s) => Math.min(s * 1.2, 5))}><ZoomInIcon /></IconButton>
+      </Tooltip>
+      <Tooltip title="Zoom Out">
+        <IconButton size="small" onClick={() => setScale((s) => Math.max(s / 1.2, 0.1))}><ZoomOutIcon /></IconButton>
+      </Tooltip>
+      {!readOnly && (
+        <>
+          <Box sx={{ width: "1px", bgcolor: "divider", mx: 0.5, flexShrink: 0, alignSelf: "stretch" }} />
+          {COLORS.map((color) => (
+            <Box
+              key={color}
+              component="button"
+              onClick={() => { setActiveColor(color); setIsEraser(false); setIsPanning(false); }}
+              title={color}
+              sx={{
+                width: 28, height: 28, bgcolor: color, border: "2px solid",
+                borderColor: (!isEraser && !isPanning && activeColor === color) ? "text.primary" : "transparent",
+                cursor: "pointer", flexShrink: 0, "&:hover": { transform: "scale(1.15)" },
               }}
-              title="Eraser"
-            >
+            />
+          ))}
+          <Box sx={{ width: "1px", bgcolor: "divider", mx: 0.5, flexShrink: 0, alignSelf: "stretch" }} />
+          <Tooltip title="Eraser">
+            <IconButton size="small" onClick={() => { setIsEraser(true); setIsPanning(false); }} color={isEraser ? "primary" : "default"}>
               <EraserIcon />
-            </ToolButton>
-            <ToolButton onClick={handleUndo} title="Undo">
-              <UndoIcon />
-            </ToolButton>
-            <ToolButton onClick={handleClear} title="Clear All" $textColor="#ff5d78">
-              <TrashIcon />
-            </ToolButton>
-          </>
-        )}
-        <Separator />
-        <ToolButton onClick={() => setIsExpanded(!isExpanded)} title={isExpanded ? "Minimize" : "Maximize"}>
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Undo">
+            <IconButton size="small" onClick={handleUndo}><UndoIcon /></IconButton>
+          </Tooltip>
+          <Tooltip title="Clear All">
+            <IconButton size="small" onClick={handleClear} sx={{ color: "error.main" }}><TrashIcon /></IconButton>
+          </Tooltip>
+        </>
+      )}
+      <Box sx={{ width: "1px", bgcolor: "divider", mx: 0.5, flexShrink: 0, alignSelf: "stretch" }} />
+      <Tooltip title={isExpanded ? "Minimize" : "Maximize"}>
+        <IconButton size="small" onClick={() => setIsExpanded(!isExpanded)}>
           {isExpanded ? <CloseIcon /> : <MaximizeIcon />}
-        </ToolButton>
-      </Toolbar>
-      <CanvasElement
+        </IconButton>
+      </Tooltip>
+    </Box>
+  );
+
+  const content = (
+    <Box sx={{ position: "relative", flex: 1, bgcolor: canvasBg, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      {toolbarContent}
+      <Box
+        component="canvas"
         ref={canvasRef}
+        sx={{ width: "100%", height: "100%", cursor: isPanning ? "grab" : "crosshair" }}
         onMouseDown={startStroke}
         onMouseMove={extendStroke}
         onMouseUp={endStroke}
@@ -492,20 +387,18 @@ export const Whiteboard = ({ strokes, readOnly = false, onStrokesChange }: White
         onConfirm={confirmClear}
         onCancel={() => setIsClearDialogOpen(false)}
       />
-    </CanvasShell>
+    </Box>
   );
 
   if (isExpanded) {
     return createPortal(
-      <ExpandedOverlay>
-        <ExpandedHeader>
-          <HeaderTitle>Whiteboard</HeaderTitle>
-          <ToolButton onClick={() => setIsExpanded(false)}>
-            <CloseIcon />
-          </ToolButton>
-        </ExpandedHeader>
+      <Box sx={{ position: "fixed", inset: 0, bgcolor: canvasBg, zIndex: 2000, display: "flex", flexDirection: "column" }}>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 3, py: 1.5, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider" }}>
+          <Box component="h2" sx={{ m: 0, fontSize: "1.1rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "text.primary" }}>Whiteboard</Box>
+          <IconButton onClick={() => setIsExpanded(false)}><CloseIcon /></IconButton>
+        </Box>
         {content}
-      </ExpandedOverlay>,
+      </Box>,
       document.body
     );
   }
@@ -519,25 +412,49 @@ const drawAllStrokes = (
   width: number,
   height: number,
   scale: number,
-  offset: { x: number; y: number }
+  offset: { x: number; y: number },
+  canvasBg: string
 ) => {
   context.clearRect(0, 0, width, height);
   context.save();
   context.translate(offset.x, offset.y);
   context.scale(scale, scale);
-  
   for (const stroke of allStrokes) {
     if (stroke.points.length < 2) continue;
-    context.strokeStyle = stroke.color;
+    context.strokeStyle = resolveStrokeColor(stroke.color, canvasBg);
     context.lineWidth = stroke.width;
     context.lineCap = "round";
     context.beginPath();
     const [first, ...rest] = stroke.points;
     context.moveTo(first.x, first.y);
-    for (const point of rest) {
-      context.lineTo(point.x, point.y);
-    }
+    for (const point of rest) context.lineTo(point.x, point.y);
     context.stroke();
   }
   context.restore();
+};
+
+// Auto-contrast: if a stroke colour is too close to the current canvas
+// background (because it was drawn in the opposite theme, or it's an eraser
+// stroke from a previous bg), render it with a contrasting ink so collab
+// content stays visible after a theme flip. Coloured strokes (red, green,
+// blue, etc.) are passed through unchanged.
+const hexLuminance = (hex: string): number => {
+  const h = hex.replace("#", "");
+  if (h.length < 6) return 0.5;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+};
+
+const resolveStrokeColor = (color: string, bg: string): string => {
+  if (!color.startsWith("#")) return color;
+  const cl = hexLuminance(color);
+  const bl = hexLuminance(bg);
+  // Near-bg colour → treat as eraser, render as new bg (stays invisible).
+  if (Math.abs(cl - bl) < 0.15) return bg;
+  // White ink on light bg or black ink on dark bg → flip to contrasting ink.
+  if (bl > 0.5 && cl > 0.85) return "#0f0f14";
+  if (bl < 0.5 && cl < 0.15) return "#ffffff";
+  return color;
 };

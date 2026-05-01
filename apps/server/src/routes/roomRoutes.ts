@@ -1,7 +1,16 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
+import rateLimit from "express-rate-limit";
 import createHttpError from "http-errors";
 import { z } from "zod";
 import { roomService } from "../services/roomService";
+
+const createRoomLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Room creation limit reached. Try again later." },
+});
 
 const roomRouter = Router();
 
@@ -9,7 +18,7 @@ const CreateRoomSchema = z.object({
   hostName: z.string().min(1).max(64).optional(),
 });
 
-roomRouter.post("/", async (req: Request, res: Response, next: NextFunction) => {
+roomRouter.post("/", createRoomLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = CreateRoomSchema.parse(req.body);
     const room = await roomService.createRoom(payload);

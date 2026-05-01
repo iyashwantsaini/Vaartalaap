@@ -17,6 +17,10 @@ export const initDb = async (): Promise<Db> => {
   logger.info(`Connected to MongoDB • ${database.databaseName}`);
 
   await database.collection("rooms").createIndex({ roomId: 1 }, { unique: true });
+  // TTL: auto-expire rooms after 30 days
+  await database
+    .collection("rooms")
+    .createIndex({ createdAt: 1 }, { expireAfterSeconds: 2592000 });
 
   return database;
 };

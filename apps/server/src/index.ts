@@ -2,6 +2,7 @@ import http from "http";
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import createHttpError, { isHttpError, type HttpError } from "http-errors";
 
 import { env } from "./config/env";
@@ -19,7 +20,18 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: "512kb" }));
+
+// General API rate limit: 120 requests per minute per IP
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please slow down." },
+});
+
+app.use("/api", apiLimiter);
 
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

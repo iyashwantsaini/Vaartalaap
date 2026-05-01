@@ -1,332 +1,251 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import styled from "styled-components";
-import { Button } from "@cred/neopop-web/lib/components";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import IconButton from "@mui/material/IconButton";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
+import MicIcon from "@mui/icons-material/Mic";
+import MicOffIcon from "@mui/icons-material/MicOff";
+import VideocamIcon from "@mui/icons-material/Videocam";
+import VideocamOffIcon from "@mui/icons-material/VideocamOff";
+import VolumeUpIcon from "@mui/icons-material/VolumeUp";
+import VolumeOffIcon from "@mui/icons-material/VolumeOff";
+import CallEndIcon from "@mui/icons-material/CallEnd";
+import OpenInFullIcon from "@mui/icons-material/OpenInFull";
+import CloseIcon from "@mui/icons-material/Close";
+import PersonIcon from "@mui/icons-material/Person";
+import ScreenShareIcon from "@mui/icons-material/ScreenShare";
+import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
+import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
+import PushPinIcon from "@mui/icons-material/PushPin";
+import PushPinOutlinedIcon from "@mui/icons-material/PushPinOutlined";
+import EmojiEmotionsOutlinedIcon from "@mui/icons-material/EmojiEmotionsOutlined";
 import { getSocket } from "../lib/socket";
-
-const Panel = styled.div`
-  margin-top: 1.25rem;
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  background: #000;
-  padding: 1.1rem 1.2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  box-shadow: ${({ theme }) => theme.shadows.card};
-`;
-
-const Title = styled.div`
-  font-size: 0.8rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: ${({ theme }) => theme.colors.text};
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-weight: 800;
-`;
-
-const TitleControls = styled.div`
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-`;
-
-const MaximizeButton = styled.button`
-  background: none;
-  border: none;
-  color: ${({ theme }) => theme.colors.text};
-  cursor: pointer;
-  padding: 0.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  
-  &:hover {
-    opacity: 0.8;
-  }
-`;
-
-const VideoRow = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0.5rem;
-`;
-
-const VideoShell = styled.div`
-  position: relative;
-  border: 1px solid ${({ theme }) => theme.colors.text};
-  background: #202124;
-  overflow: hidden;
-  aspect-ratio: 4 / 3;
-  width: 100%;
-  max-width: 80vh;
-  margin: 0 auto;
-  
-  &:hover .video-overlay {
-    opacity: 1;
-  }
-`;
-
-const Video = styled.video<{ $mirrored?: boolean }>`
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transform: ${({ $mirrored }) => ($mirrored ? "scaleX(-1)" : "none")};
-`;
-
-const VideoOverlay = styled.div`
-  position: absolute;
-  bottom: 0.5rem;
-  left: 0;
-  width: 100%;
-  padding: 0.25rem;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 0.25rem;
-  opacity: 0;
-  transition: opacity 0.2s ease-in-out;
-  z-index: 10;
-  flex-wrap: wrap;
-`;
-
-const Status = styled.div`
-  font-size: 0.75rem;
-  color: ${({ theme }) => theme.colors.textMuted};
-`;
-
-const ExpandedOverlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.95);
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  padding: 2rem;
-`;
-
-const ExpandedHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-  color: #fff;
-`;
-
-const ExpandedGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1rem;
-  flex: 1;
-  overflow-y: auto;
-  align-content: center;
-  padding: 1rem;
-`;
+import { ChatPanel } from "./ChatPanel";
 
 interface CallPanelProps {
   roomId: string;
+  participants?: { id: string; displayName: string }[];
+  localParticipantId?: string;
+  localDisplayName?: string;
+  // socket.id -> participantId mapping if available; not required
+}
+
+const REACTION_EMOJIS = ["👍", "❤️", "🎉", "👏", "😂", "🔥", "🤔"] as const;
+
+interface FloatingReaction {
+  id: string;
+  emoji: string;
+  from: string; // display label
+  /** horizontal anchor 0-100 (% of container width) */
+  x: number;
 }
 
 const iceServers: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+  // Free TURN via Open Relay — enables connections behind symmetric NAT / corporate VPNs
+  {
+    urls: [
+      "turn:openrelay.metered.ca:80",
+      "turn:openrelay.metered.ca:443",
+      "turn:openrelay.metered.ca:443?transport=tcp",
+    ],
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
 ];
 
-const VideoStream = ({ 
-  stream, 
-  isLocal = false, 
+const ReactionsButton = ({ onSend }: { onSend: (emoji: string) => void }) => {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  return (
+    <>
+      <Tooltip title="Send a reaction">
+        <IconButton
+          onClick={(e) => setAnchor(e.currentTarget)}
+          sx={{
+            bgcolor: anchor ? "primary.main" : "rgba(255,255,255,0.08)",
+            color: "white",
+            width: 44,
+            height: 44,
+            "&:hover": { bgcolor: anchor ? "primary.dark" : "rgba(255,255,255,0.16)" },
+          }}
+        >
+          <EmojiEmotionsOutlinedIcon />
+        </IconButton>
+      </Tooltip>
+      {anchor && (
+        <Box
+          onMouseLeave={() => setAnchor(null)}
+          sx={{
+            position: "fixed",
+            zIndex: 1400,
+            left: anchor.getBoundingClientRect().left + anchor.offsetWidth / 2,
+            bottom: window.innerHeight - anchor.getBoundingClientRect().top + 8,
+            transform: "translateX(-50%)",
+            display: "flex",
+            gap: 0.5,
+            bgcolor: "rgba(20,20,28,0.95)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 999,
+            px: 1,
+            py: 0.5,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+          }}
+        >
+          {REACTION_EMOJIS.map((emoji) => (
+            <IconButton
+              key={emoji}
+              onClick={() => {
+                onSend(emoji);
+                setAnchor(null);
+              }}
+              sx={{
+                fontSize: "1.4rem",
+                width: 40,
+                height: 40,
+                color: "white",
+                "&:hover": { transform: "scale(1.25)", bgcolor: "rgba(255,255,255,0.08)" },
+                transition: "transform 0.12s ease",
+              }}
+            >
+              {emoji}
+            </IconButton>
+          ))}
+        </Box>
+      )}
+    </>
+  );
+};
+
+const VideoStream = ({
+  stream,
+  isLocal = false,
   mirrored = false,
   muted = false,
-  children 
-}: { 
+  label,
+  isYou = false,
+  videoOff = false,
+  fitContain = false,
+  flexFill = false,
+  badge,
+  children,
+}: {
   stream: MediaStream | null;
   isLocal?: boolean;
   mirrored?: boolean;
   muted?: boolean;
+  label?: string;
+  isYou?: boolean;
+  videoOff?: boolean;
+  fitContain?: boolean;
+  /** When true, the wrapper fills its parent without forcing a 16:9 aspect.
+   *  Use for spotlight / alone-in-call so the camera feed centers naturally. */
+  flexFill?: boolean;
+  badge?: string;
   children?: React.ReactNode;
 }) => {
   const videoRef = useCallback((node: HTMLVideoElement | null) => {
     if (node && stream) {
       node.srcObject = stream;
-      // Only try to play if paused to avoid interruption errors
-      if (node.paused) {
-        node.play().catch(e => console.warn("[webrtc] play failed", e));
-      }
+      if (node.paused) node.play().catch((e) => console.warn("[webrtc] play failed", e));
+    } else if (node) {
+      // Detach when stream becomes null so audio stops immediately
+      node.srcObject = null;
     }
   }, [stream]);
-  
+
+  // Force `contain` whenever the tile fills (no aspect constraint) — otherwise
+  // a 4:3 webcam in a 16:9 wrapper would crop faces.
+  const useContain = fitContain || flexFill;
+
   return (
-    <VideoShell>
-      <Video 
-        ref={videoRef} 
-        autoPlay 
-        playsInline 
-        muted={isLocal || muted} 
-        $mirrored={mirrored} 
+    <Box
+      sx={{
+        position: "relative",
+        borderRadius: 2,
+        bgcolor: "#0b0b10",
+        overflow: "hidden",
+        ...(flexFill
+          ? { width: "100%", height: "100%" }
+          : { aspectRatio: "16/9", width: "100%", height: "100%" }),
+        boxShadow: "0 1px 3px rgba(0,0,0,0.5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        "&:hover .video-overlay": { opacity: 1 },
+      }}
+    >
+      <Box
+        component="video"
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={isLocal || muted}
+        sx={{
+          width: "100%",
+          height: "100%",
+          objectFit: useContain ? "contain" : "cover",
+          backgroundColor: useContain ? "#000" : "transparent",
+          transform: mirrored ? "scaleX(-1)" : "none",
+          display: videoOff ? "none" : "block",
+        }}
       />
+      {videoOff && (
+        <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 1 }}>
+          <Box sx={{ width: 64, height: 64, borderRadius: "50%", bgcolor: "primary.main", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <PersonIcon sx={{ fontSize: 36, color: "white" }} />
+          </Box>
+        </Box>
+      )}
+      {badge && (
+        <Box sx={{ position: "absolute", top: 8, left: 8, px: 1, py: 0.25, bgcolor: "primary.main", borderRadius: 1, display: "flex", alignItems: "center", gap: 0.5 }}>
+          <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: "white", animation: "pulse 1.5s infinite" }} />
+          <Typography variant="caption" sx={{ color: "white", fontWeight: 700, letterSpacing: "0.05em" }}>
+            {badge}
+          </Typography>
+        </Box>
+      )}
+      {label && (
+        <Box sx={{ position: "absolute", bottom: 8, left: 8, px: 1, py: 0.25, bgcolor: "rgba(0,0,0,0.6)", borderRadius: 1, backdropFilter: "blur(4px)" }}>
+          <Typography variant="caption" sx={{ color: "white", fontWeight: 600 }}>
+            {label}{isYou ? " (you)" : ""}
+          </Typography>
+        </Box>
+      )}
       {children}
-    </VideoShell>
+    </Box>
   );
 };
 
-// Icons
-const SpeakerIcon = () => (
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
-);
-const SpeakerOffIcon = () => (
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73 4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
-);
-const MicIcon = () => (
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-);
-const MicOffIcon = () => (
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02 5.02L19.06 20.1l1.27-1.27L2.97 1.5 1.7 2.77l3.36 3.36C4.2 7.6 3.69 9.24 3.69 11h1.7c0-1.3.4-2.5 1.08-3.48l2.52 2.52V11c0 1.66 1.34 3 3 3 .1 0 .2-.01.29-.02l2.74 2.74zM12 14c-1.66 0-3-1.34-3-3V6.48l4.43 4.43c-.14 1.73-1.59 3.09-3.43 3.09zm7.04-9.11l-1.27-1.27-2.49 2.49c-.5-.2-1.05-.31-1.62-.31-2.48 0-4.5 2.02-4.5 4.5V11l2.49 2.49V6.8c0-1.1.9-2 2-2s2 .9 2 2v1.17l3.39 3.39V4.89z"/></svg>
-);
-const CamIcon = () => (
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
-);
-const CamOffIcon = () => (
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M21 6.5l-4 4V7c0-.55-.45-1-1-1H9.82L21 17.18V6.5zM3.27 2L2 3.27 4.73 6H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.21 0 .39-.08.54-.18L19.73 21 21 19.73 3.27 2z"/></svg>
-);
-const PhoneIcon = styled.svg`
-  transform: rotate(135deg);
-  width: 20px;
-  height: 20px;
-  fill: currentColor;
-`;
-
-const MaximizeIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-  </svg>
-);
-
-const CloseIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="18" y1="6" x2="6" y2="18" />
-    <line x1="6" y1="6" x2="18" y2="18" />
-  </svg>
-);
-
-const PhoneIconPath = () => (
-  <PhoneIcon viewBox="0 0 24 24">
-    <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
-  </PhoneIcon>
-);
-
-const JoinWrapper = styled.div`
-  display: flex;
-  justify-content: center;
-  margin-top: 0.5rem;
-  width: 100%;
-`;
-
-const JoinButton = styled.button`
-  background: ${({ theme }) => theme.colors.accent};
-  color: #ffffff;
-  border: 1px solid ${({ theme }) => theme.colors.accent};
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
-  font-weight: 800;
-  font-family: ${({ theme }) => theme.fonts.mono};
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  border-radius: 0px;
-  transition: all 0.2s;
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-
-  &:hover {
-    background: #ffffff;
-    border-color: #ffffff;
-    color: #000000;
-    box-shadow: 4px 4px 0px #ffffff;
-    transform: translate(-2px, -2px);
-  }
-
-  &:active {
-    transform: translate(0, 0);
-    box-shadow: none;
-  }
-`;
-
-const LeaveButton = styled.button`
-  background: ${({ theme }) => theme.colors.error};
-  color: #ffffff;
-  border: 1px solid ${({ theme }) => theme.colors.error};
-  padding: 0.4rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  border-radius: 0px;
-  transition: all 0.2s;
-
-  &:hover {
-    background: #ff5252;
-    border-color: #ff5252;
-    box-shadow: 2px 2px 0px #ffffff;
-    transform: translate(-1px, -1px);
-  }
-
-  &:active {
-    transform: translate(0, 0);
-    box-shadow: none;
-  }
-  
-  svg {
-    width: 18px;
-    height: 18px;
-  }
-`;
-
-const ControlButton = styled.button<{ $active?: boolean }>`
-  background: ${({ theme, $active }) => $active ? theme.colors.surface : theme.colors.surfaceMuted};
-  color: ${({ theme }) => theme.colors.text};
-  border: 1px solid ${({ theme }) => theme.colors.text};
-  padding: 0.4rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  border-radius: 0px;
-  transition: all 0.2s;
-
-  &:hover {
-    background: ${({ theme }) => theme.colors.text};
-    color: ${({ theme }) => theme.colors.surface};
-    box-shadow: 2px 2px 0px ${({ theme }) => theme.colors.highlight};
-    transform: translate(-1px, -1px);
-  }
-
-  &:active {
-    transform: translate(0, 0);
-    box-shadow: none;
-  }
-
-  svg {
-    width: 18px;
-    height: 18px;
-  }
-`;
-
-export const CallPanel = ({ roomId }: CallPanelProps) => {
+export const CallPanel = ({ roomId, localDisplayName, participants = [], localParticipantId }: CallPanelProps) => {
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
-  
+
   const [remoteStreams, setRemoteStreams] = useState<{ peerId: string; stream: MediaStream }[]>([]);
+  // Maps a peer's socket.id to its participantId so we can look up display names
+  const [peerParticipantIds, setPeerParticipantIds] = useState<Record<string, string>>({});
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [micEnabled, setMicEnabled] = useState(true);
   const [camEnabled, setCamEnabled] = useState(true);
   const [speakerEnabled, setSpeakerEnabled] = useState(true);
   const [inCall, setInCall] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isSharingScreen, setIsSharingScreen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  // Tile id of the pinned/spotlighted participant. "local" or a peer socketId.
+  // null = no pin (grid mode). Auto-set when a peer (or local) starts sharing.
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
+  // Set of peer socketIds currently sharing their screen
+  const [sharingPeers, setSharingPeers] = useState<Set<string>>(new Set());
+  // Live floating reactions overlaid on the call surface (auto-expire after ~3s)
+  const [reactions, setReactions] = useState<FloatingReaction[]>([]);
+  const screenStreamRef = useRef<MediaStream | null>(null);
+  const cameraVideoTrackRef = useRef<MediaStreamTrack | null>(null);
 
   const socket = getSocket();
 
@@ -345,7 +264,12 @@ export const CallPanel = ({ roomId }: CallPanelProps) => {
   }, []);
 
   const removeRemoteStream = useCallback((peerId: string) => {
-    setRemoteStreams((prev) => prev.filter((p) => p.peerId !== peerId));
+    setRemoteStreams((prev) => {
+      const target = prev.find((p) => p.peerId === peerId);
+      // Stop every track on the remote stream so audio playback halts immediately
+      target?.stream.getTracks().forEach((t) => t.stop());
+      return prev.filter((p) => p.peerId !== peerId);
+    });
   }, []);
 
   const createPeer = useCallback((peerId: string, initiator: boolean, stream: MediaStream) => {
@@ -367,13 +291,14 @@ export const CallPanel = ({ roomId }: CallPanelProps) => {
     pc.ontrack = (event) => {
       const [remoteStream] = event.streams;
       if (remoteStream) {
-        console.log(`[webrtc] received remote stream from ${peerId}`, remoteStream.id);
         addRemoteStream(peerId, remoteStream);
       }
     };
 
     pc.oniceconnectionstatechange = () => {
-      console.log(`[webrtc] ice state for ${peerId}: ${pc.iceConnectionState}`);
+      if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
+        console.warn(`[webrtc] ice ${pc.iceConnectionState} for peer ${peerId}`);
+      }
     };
 
     if (initiator) {
@@ -392,17 +317,18 @@ export const CallPanel = ({ roomId }: CallPanelProps) => {
     return pc;
   }, [roomId, socket, addRemoteStream]);
 
-  const handleUserJoined = useCallback(async ({ socketId }: { socketId: string }) => {
+  const handleUserJoined = useCallback(async ({ socketId, participantId }: { socketId: string; participantId?: string }) => {
     if (!localStreamRef.current) return;
-    console.log("[webrtc] user joined call", socketId);
-    
+
+    if (participantId) {
+      setPeerParticipantIds((prev) => ({ ...prev, [socketId]: participantId }));
+    }
+
     if (peersRef.current.has(socketId)) {
       const pc = peersRef.current.get(socketId);
       if (pc && pc.connectionState !== "closed" && pc.connectionState !== "failed") {
-        console.warn(`[webrtc] peer ${socketId} already exists and is active, ignoring join event`);
         return;
       }
-      // If peer exists but is closed/failed, clean it up before creating new one
       pc?.close();
       peersRef.current.delete(socketId);
       removeRemoteStream(socketId);
@@ -411,10 +337,20 @@ export const CallPanel = ({ roomId }: CallPanelProps) => {
     createPeer(socketId, true, localStreamRef.current);
   }, [createPeer, removeRemoteStream]);
 
-  const handleOffer = useCallback(async ({ from, sdp }: { from: string; sdp: RTCSessionDescriptionInit }) => {
+  const handleCallRoster = useCallback((roster: { socketId: string; participantId: string }[]) => {
+    if (!Array.isArray(roster)) return;
+    setPeerParticipantIds((prev) => {
+      const next = { ...prev };
+      for (const r of roster) next[r.socketId] = r.participantId;
+      return next;
+    });
+  }, []);
+
+  const handleOffer = useCallback(async ({ from, to, sdp }: { from: string; to?: string; sdp: RTCSessionDescriptionInit }) => {
+    // Ignore offers not addressed to us (defensive guard for broadcast fallback)
+    if (to && to !== socket.id) return;
     if (!localStreamRef.current) return;
-    console.log("[webrtc] handleOffer", from);
-    
+
     let pc = peersRef.current.get(from);
     if (!pc) {
       pc = createPeer(from, false, localStreamRef.current);
@@ -432,11 +368,9 @@ export const CallPanel = ({ roomId }: CallPanelProps) => {
         const isPolite = socketId ? socketId < from : true;
 
         if (!isPolite) {
-          console.warn(`[webrtc] Glare detected with ${from}, I am impolite (ignoring offer)`);
           return;
         }
 
-        console.log(`[webrtc] Glare detected with ${from}, I am polite (rolling back and accepting)`);
         await pc.setLocalDescription({ type: "rollback" });
       }
 
@@ -454,12 +388,10 @@ export const CallPanel = ({ roomId }: CallPanelProps) => {
   }, [roomId, socket, createPeer]);
 
   const handleAnswer = useCallback(async ({ from, sdp }: { from: string; sdp: RTCSessionDescriptionInit }) => {
-    console.log("[webrtc] handleAnswer", from);
     const pc = peersRef.current.get(from);
     if (pc) {
       try {
         if (pc.signalingState === "stable") {
-          console.warn(`[webrtc] received answer while stable for ${from}, ignoring`);
           return;
         }
         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
@@ -481,30 +413,79 @@ export const CallPanel = ({ roomId }: CallPanelProps) => {
   }, []);
 
   const handleUserLeft = useCallback(({ socketId }: { socketId: string }) => {
-    console.log("[webrtc] user left call", socketId);
     const pc = peersRef.current.get(socketId);
     if (pc) {
       pc.close();
       peersRef.current.delete(socketId);
     }
     removeRemoteStream(socketId);
+    setPeerParticipantIds((prev) => {
+      if (!(socketId in prev)) return prev;
+      const next = { ...prev };
+      delete next[socketId];
+      return next;
+    });
+    setSharingPeers((prev) => {
+      if (!prev.has(socketId)) return prev;
+      const next = new Set(prev);
+      next.delete(socketId);
+      return next;
+    });
+    setPinnedId((curr) => (curr === socketId ? null : curr));
   }, [removeRemoteStream]);
 
   useEffect(() => {
     socket.on("room:call-user-joined", handleUserJoined);
     socket.on("room:call-user-left", handleUserLeft);
+    socket.on("room:call-roster", handleCallRoster);
     socket.on("room:rtc-offer", handleOffer);
     socket.on("room:rtc-answer", handleAnswer);
     socket.on("room:rtc-ice", handleIce);
 
+    const handleScreenShare = ({ socketId, sharing }: { socketId: string; sharing: boolean }) => {
+      setSharingPeers((prev) => {
+        const next = new Set(prev);
+        if (sharing) next.add(socketId); else next.delete(socketId);
+        return next;
+      });
+      // Auto-pin the new sharer; auto-unpin when they stop
+      setPinnedId((curr) => {
+        if (sharing) return socketId;
+        if (curr === socketId) return null;
+        return curr;
+      });
+    };
+    socket.on("room:screen-share", handleScreenShare);
+
+    const handleReaction = (payload: { id: string; socketId: string; participantId: string; emoji: string }) => {
+      const fromName =
+        payload.participantId === localParticipantId
+          ? "You"
+          : participants.find((p) => p.id === payload.participantId)?.displayName ?? "Someone";
+      const x = 15 + Math.random() * 70; // 15% .. 85%
+      const reaction: FloatingReaction = { id: payload.id, emoji: payload.emoji, from: fromName, x };
+      setReactions((prev) => [...prev.slice(-15), reaction]);
+      setTimeout(() => {
+        setReactions((prev) => prev.filter((r) => r.id !== reaction.id));
+      }, 3000);
+    };
+    socket.on("room:reaction", handleReaction);
+
     return () => {
       socket.off("room:call-user-joined", handleUserJoined);
       socket.off("room:call-user-left", handleUserLeft);
+      socket.off("room:call-roster", handleCallRoster);
       socket.off("room:rtc-offer", handleOffer);
       socket.off("room:rtc-answer", handleAnswer);
       socket.off("room:rtc-ice", handleIce);
+      socket.off("room:screen-share", handleScreenShare);
+      socket.off("room:reaction", handleReaction);
     };
-  }, [socket, handleUserJoined, handleUserLeft, handleOffer, handleAnswer, handleIce]);
+  }, [socket, handleUserJoined, handleUserLeft, handleCallRoster, handleOffer, handleAnswer, handleIce, localParticipantId, participants]);
+
+  const sendReaction = (emoji: string) => {
+    socket.emit("room:reaction", { roomId, emoji });
+  };
 
   const startCall = async () => {
     try {
@@ -520,18 +501,34 @@ export const CallPanel = ({ roomId }: CallPanelProps) => {
   };
 
   const endCall = () => {
+    // Stop screen share if active
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((t) => t.stop());
+      screenStreamRef.current = null;
+    }
+    cameraVideoTrackRef.current = null;
+    setIsSharingScreen(false);
+
     peersRef.current.forEach((pc) => pc.close());
     peersRef.current.clear();
-    setRemoteStreams([]);
-    
+
+    // Stop tracks on every remote stream before dropping them so speakers go silent
+    setRemoteStreams((prev) => {
+      prev.forEach(({ stream }) => stream.getTracks().forEach((t) => t.stop()));
+      return [];
+    });
+
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
     }
     setLocalStream(null);
-    
+
     setInCall(false);
     setIsExpanded(false);
+    setPeerParticipantIds({});
+    setSharingPeers(new Set());
+    setPinnedId(null);
     socket.emit("room:leave-call", { roomId });
   };
 
@@ -559,85 +556,431 @@ export const CallPanel = ({ roomId }: CallPanelProps) => {
     setSpeakerEnabled(!speakerEnabled);
   };
 
-  const renderVideos = () => (
+  const replaceVideoTrackOnPeers = (track: MediaStreamTrack | null) => {
+    peersRef.current.forEach((pc) => {
+      const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+      if (sender) {
+        sender.replaceTrack(track).catch((e) => console.warn("[webrtc] replaceTrack failed", e));
+      }
+    });
+  };
+
+  const stopScreenShare = useCallback(() => {
+    const screen = screenStreamRef.current;
+    if (screen) {
+      screen.getTracks().forEach((t) => t.stop());
+      screenStreamRef.current = null;
+    }
+    // Restore camera video track on all peers and on the local preview
+    const camTrack = cameraVideoTrackRef.current;
+    replaceVideoTrackOnPeers(camTrack ?? null);
+    if (localStreamRef.current && camTrack) {
+      // Swap the video track inside the local stream so the local preview shows the camera again
+      const localStreamObj = localStreamRef.current;
+      localStreamObj.getVideoTracks().forEach((t) => {
+        if (t !== camTrack) localStreamObj.removeTrack(t);
+      });
+      if (!localStreamObj.getVideoTracks().includes(camTrack)) {
+        localStreamObj.addTrack(camTrack);
+      }
+      // Force a new stream reference so React re-renders the <video>
+      const refreshed = new MediaStream(localStreamObj.getTracks());
+      localStreamRef.current = refreshed;
+      setLocalStream(refreshed);
+    }
+    setIsSharingScreen(false);
+    setPinnedId((curr) => (curr === "local" ? null : curr));
+    socket.emit("room:screen-share", { roomId, sharing: false });
+  }, [roomId, socket]);
+
+  const toggleScreenShare = async () => {
+    if (isSharingScreen) {
+      stopScreenShare();
+      return;
+    }
+    try {
+      const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      screenStreamRef.current = display;
+      const screenTrack = display.getVideoTracks()[0];
+      if (!screenTrack) return;
+
+      // Save current camera track so we can restore it later
+      if (localStreamRef.current) {
+        const camTrack = localStreamRef.current.getVideoTracks()[0] ?? null;
+        cameraVideoTrackRef.current = camTrack;
+      }
+
+      // Replace track for all peer connections
+      replaceVideoTrackOnPeers(screenTrack);
+
+      // Update the local preview stream
+      if (localStreamRef.current) {
+        const localStreamObj = localStreamRef.current;
+        localStreamObj.getVideoTracks().forEach((t) => localStreamObj.removeTrack(t));
+        localStreamObj.addTrack(screenTrack);
+        const refreshed = new MediaStream(localStreamObj.getTracks());
+        localStreamRef.current = refreshed;
+        setLocalStream(refreshed);
+      }
+
+      // When the user clicks the browser's "Stop sharing" button
+      screenTrack.onended = () => stopScreenShare();
+      setIsSharingScreen(true);
+      setPinnedId("local");
+      socket.emit("room:screen-share", { roomId, sharing: true });
+    } catch (err) {
+      console.warn("[screen-share] cancelled or failed", err);
+    }
+  };
+
+  const renderVideos = () => {
+    // When alone in the compact view, prefer `contain` so a 4:3 webcam shows
+    // the full face (with light letterboxing) instead of being cropped.
+    const aloneInCompact = remoteStreams.length === 0;
+    return (
     <>
-      <VideoStream stream={localStream} isLocal mirrored>
-        <VideoOverlay className="video-overlay">
-          <ControlButton
-            onClick={toggleMic}
-            title={micEnabled ? "Mute Mic" : "Unmute Mic"}
-            $active={!micEnabled}
-          >
-            {micEnabled ? <MicIcon /> : <MicOffIcon />}
-          </ControlButton>
-          <ControlButton
-            onClick={toggleCam}
-            title={camEnabled ? "Turn Camera Off" : "Turn Camera On"}
-            $active={!camEnabled}
-          >
-            {camEnabled ? <CamIcon /> : <CamOffIcon />}
-          </ControlButton>
-          <ControlButton
-            onClick={toggleSpeaker}
-            title={speakerEnabled ? "Mute Speaker" : "Unmute Speaker"}
-            $active={!speakerEnabled}
-          >
-            {speakerEnabled ? <SpeakerIcon /> : <SpeakerOffIcon />}
-          </ControlButton>
-          <LeaveButton onClick={endCall} title="Leave Call">
-            <PhoneIconPath />
-          </LeaveButton>
-        </VideoOverlay>
-      </VideoStream>
-      {remoteStreams.map(({ peerId, stream }) => (
-        <VideoStream key={peerId} stream={stream} muted={!speakerEnabled} />
-      ))}
+      <VideoStream
+        stream={localStream}
+        isLocal
+        mirrored={!isSharingScreen}
+        label={localDisplayName || "You"}
+        isYou
+        videoOff={!camEnabled && !isSharingScreen}
+        fitContain={isSharingScreen || aloneInCompact}
+        badge={isSharingScreen ? "SHARING" : undefined}
+      />
+      {remoteStreams.map(({ peerId, stream }) => {
+        const pid = peerParticipantIds[peerId];
+        const name = participants.find((p) => p.id === pid)?.displayName ?? "Guest";
+        return (
+          <VideoStream key={peerId} stream={stream} muted={!speakerEnabled} label={name} />
+        );
+      })}
     </>
-  );
+    );
+  };
+
+  const totalTiles = remoteStreams.length + 1;
+  // Choose grid columns based on tile count for a Meet-like layout
+  const expandedColumns =
+    totalTiles === 1 ? "1fr"
+      : totalTiles === 2 ? "repeat(2, 1fr)"
+        : totalTiles <= 4 ? "repeat(2, 1fr)"
+          : totalTiles <= 9 ? "repeat(3, 1fr)"
+            : "repeat(4, 1fr)";
 
   return (
-    <Panel>
-      <Title>
-        <span>Interview Call</span>
-        <TitleControls>
-          {inCall && <Status>{remoteStreams.length + 1} Active</Status>}
+    <Paper variant="outlined" sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1, bgcolor: "background.paper" }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Typography
+          variant="caption"
+          sx={{
+            fontWeight: 800,
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            fontSize: "0.68rem",
+            background: "linear-gradient(135deg, #4f63ff 0%, #8b9eff 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+          }}
+        >
+          Live Call
+        </Typography>
+        <Stack direction="row" alignItems="center" spacing={0.5}>
+          {inCall && <Chip label={`${totalTiles} on call`} size="small" variant="outlined" />}
           {inCall && (
-            <MaximizeButton onClick={() => setIsExpanded(true)} title="Expand View">
-              <MaximizeIcon />
-            </MaximizeButton>
+            <Tooltip title="Expand View">
+              <IconButton size="small" onClick={() => setIsExpanded(true)}><OpenInFullIcon fontSize="small" /></IconButton>
+            </Tooltip>
           )}
-        </TitleControls>
-      </Title>
-      
+        </Stack>
+      </Stack>
+
       {inCall ? (
         <>
           {!isExpanded && (
-            <VideoRow>
-              {renderVideos()}
-            </VideoRow>
+            <>
+              <Box sx={{
+                display: "grid",
+                gridTemplateColumns: totalTiles === 1 ? "1fr" : "repeat(2, 1fr)",
+                gap: 0.75,
+              }}>
+                {renderVideos()}
+              </Box>
+              <Stack direction="row" spacing={0.5} justifyContent="center" sx={{ pt: 0.75 }}>
+                <Tooltip title={micEnabled ? "Mute mic" : "Unmute mic"}>
+                  <IconButton size="small" onClick={toggleMic} sx={{ bgcolor: micEnabled ? "action.hover" : "error.main", color: micEnabled ? "text.primary" : "white", "&:hover": { bgcolor: micEnabled ? "action.selected" : "error.dark" } }}>
+                    {micEnabled ? <MicIcon fontSize="small" /> : <MicOffIcon fontSize="small" />}
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title={camEnabled ? "Stop camera" : "Start camera"}>
+                  <IconButton size="small" onClick={toggleCam} sx={{ bgcolor: camEnabled ? "action.hover" : "error.main", color: camEnabled ? "text.primary" : "white", "&:hover": { bgcolor: camEnabled ? "action.selected" : "error.dark" } }}>
+                    {camEnabled ? <VideocamIcon fontSize="small" /> : <VideocamOffIcon fontSize="small" />}
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title={isSharingScreen ? "Stop sharing" : "Share screen"}>
+                  <IconButton size="small" onClick={toggleScreenShare} sx={{ bgcolor: isSharingScreen ? "primary.main" : "action.hover", color: isSharingScreen ? "white" : "text.primary", "&:hover": { bgcolor: isSharingScreen ? "primary.dark" : "action.selected" } }}>
+                    {isSharingScreen ? <StopScreenShareIcon fontSize="small" /> : <ScreenShareIcon fontSize="small" />}
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title={speakerEnabled ? "Mute speaker" : "Unmute speaker"}>
+                  <IconButton size="small" onClick={toggleSpeaker} sx={{ bgcolor: "action.hover", color: speakerEnabled ? "text.primary" : "error.main", "&:hover": { bgcolor: "action.selected" } }}>
+                    {speakerEnabled ? <VolumeUpIcon fontSize="small" /> : <VolumeOffIcon fontSize="small" />}
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Leave call">
+                  <IconButton size="small" onClick={endCall} sx={{ bgcolor: "error.main", color: "white", "&:hover": { bgcolor: "error.dark" }, ml: 0.5 }}>
+                    <CallEndIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </>
           )}
           {isExpanded && createPortal(
-            <ExpandedOverlay>
-              <ExpandedHeader>
-                <h2>Interview Call ({remoteStreams.length + 1} Active)</h2>
-                <MaximizeButton onClick={() => setIsExpanded(false)}>
-                  <CloseIcon />
-                </MaximizeButton>
-              </ExpandedHeader>
-              <ExpandedGrid>
-                {renderVideos()}
-              </ExpandedGrid>
-            </ExpandedOverlay>,
+            <Box sx={{ position: "fixed", inset: 0, bgcolor: "#000", zIndex: 1300, display: "flex", flexDirection: "column" }}>
+              {/* Top bar */}
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 3, py: 1.5, color: "white", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                <Stack direction="row" alignItems="center" spacing={1.5}>
+                  <Typography variant="subtitle1" fontWeight={700}>Live call</Typography>
+                  <Chip size="small" label={`${totalTiles} on call`} sx={{ bgcolor: "rgba(255,255,255,0.08)", color: "white" }} />
+                  {isSharingScreen && (
+                    <Chip size="small" color="primary" label="You're sharing your screen" />
+                  )}
+                </Stack>
+                <IconButton onClick={() => setIsExpanded(false)} sx={{ color: "white" }}><CloseIcon /></IconButton>
+              </Stack>
+
+              {/* Body: spotlight + filmstrip OR grid, then optional chat sidebar */}
+              <Box sx={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
+                {/* Floating reactions overlay */}
+                <Box sx={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 5, overflow: "hidden",
+                  "@keyframes vaaReactionFloat": {
+                    "0%": { transform: "translate(-50%, 0) scale(0.6)", opacity: 0 },
+                    "15%": { transform: "translate(-50%, -10%) scale(1.1)", opacity: 1 },
+                    "100%": { transform: "translate(-50%, -120%) scale(1)", opacity: 0 },
+                  },
+                }}>
+                  {reactions.map((r) => (
+                    <Box
+                      key={r.id}
+                      sx={{
+                        position: "absolute",
+                        bottom: 0,
+                        left: `${r.x}%`,
+                        animation: "vaaReactionFloat 3s ease-out forwards",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: 0.5,
+                      }}
+                    >
+                      <Box sx={{ fontSize: "3rem", filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.6))" }}>{r.emoji}</Box>
+                      <Box sx={{ px: 1, py: 0.25, bgcolor: "rgba(0,0,0,0.6)", borderRadius: 1, color: "white", fontSize: "0.7rem", fontWeight: 600 }}>
+                        {r.from}
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+                {(() => {
+                  // Build tile descriptors for the expanded view.
+                  // In expanded mode we always use `contain` (via fitContain) so
+                  // a 4:3 webcam never crops the user's face inside our 16:9
+                  // wrapper. Screen-share tiles already need contain anyway.
+                  type Tile = { id: string; label: string; isYou: boolean; stream: MediaStream | null; mirrored: boolean; videoOff: boolean; muted: boolean; fitContain: boolean; badge?: string };
+                  const tiles: Tile[] = [
+                    {
+                      id: "local",
+                      label: localDisplayName || "You",
+                      isYou: true,
+                      stream: localStream,
+                      mirrored: !isSharingScreen,
+                      videoOff: !camEnabled && !isSharingScreen,
+                      muted: false,
+                      fitContain: true,
+                      badge: isSharingScreen ? "SHARING" : undefined,
+                    },
+                    ...remoteStreams.map(({ peerId, stream }) => {
+                      const pid = peerParticipantIds[peerId];
+                      const isSharing = sharingPeers.has(peerId);
+                      return {
+                        id: peerId,
+                        label: participants.find((p) => p.id === pid)?.displayName ?? "Guest",
+                        isYou: false,
+                        stream,
+                        mirrored: false,
+                        videoOff: false,
+                        muted: !speakerEnabled,
+                        fitContain: true,
+                        badge: isSharing ? "SHARING" : undefined,
+                      };
+                    }),
+                  ];
+
+                  const pinned = pinnedId ? tiles.find((t) => t.id === pinnedId) : null;
+                  const others = pinned ? tiles.filter((t) => t.id !== pinned.id) : tiles;
+
+                  const renderTile = (t: Tile, opts: { large?: boolean }) => (
+                    <Box key={t.id} sx={{ position: "relative", width: "100%", height: "100%" }}>
+                      <VideoStream
+                        stream={t.stream}
+                        isLocal={t.isYou}
+                        mirrored={t.mirrored}
+                        muted={t.muted}
+                        label={t.label}
+                        isYou={t.isYou}
+                        videoOff={t.videoOff}
+                        fitContain={t.fitContain}
+                        flexFill={opts.large}
+                        badge={t.badge}
+                      />
+                      <Tooltip title={pinnedId === t.id ? "Unpin" : "Pin to spotlight"}>
+                        <IconButton
+                          size="small"
+                          onClick={() => setPinnedId((curr) => (curr === t.id ? null : t.id))}
+                          sx={{
+                            position: "absolute",
+                            top: 8,
+                            right: 8,
+                            bgcolor: pinnedId === t.id ? "primary.main" : "rgba(0,0,0,0.55)",
+                            color: "white",
+                            "&:hover": { bgcolor: pinnedId === t.id ? "primary.dark" : "rgba(0,0,0,0.8)" },
+                          }}
+                        >
+                          {pinnedId === t.id ? <PushPinIcon fontSize="small" /> : <PushPinOutlinedIcon fontSize="small" />}
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  );
+
+                  if (pinned) {
+                    return (
+                      <Box sx={{ flex: 1, display: "flex", overflow: "hidden", p: 1.5, gap: 1.5 }}>
+                        {/* Spotlight */}
+                        <Box sx={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <Box sx={{ width: "100%", height: "100%" }}>
+                            {renderTile(pinned, { large: true })}
+                          </Box>
+                        </Box>
+                        {/* Filmstrip */}
+                        {others.length > 0 && (
+                          <Box sx={{
+                            width: 240,
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 1,
+                            overflowY: "auto",
+                            flexShrink: 0,
+                          }}>
+                            {others.map((t) => (
+                              <Box key={t.id} sx={{ aspectRatio: "16/9", width: "100%" }}>
+                                {renderTile(t, {})}
+                              </Box>
+                            ))}
+                          </Box>
+                        )}
+                      </Box>
+                    );
+                  }
+
+                  // Single tile (alone in call) — render as a centered spotlight
+                  // that fills the available area without forcing 16:9, so the
+                  // user's webcam shows naturally instead of being cropped.
+                  if (tiles.length === 1) {
+                    return (
+                      <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", p: { xs: 1.5, md: 3 } }}>
+                        <Box sx={{ width: "100%", height: "100%", maxWidth: 1400 }}>
+                          {renderTile(tiles[0], { large: true })}
+                        </Box>
+                      </Box>
+                    );
+                  }
+
+                  // Default grid layout when nothing is pinned
+                  return (
+                    <Box sx={{
+                      flex: 1,
+                      display: "grid",
+                      gridTemplateColumns: expandedColumns,
+                      gap: 1.5,
+                      p: 2,
+                      overflow: "hidden",
+                      alignContent: "center",
+                      justifyContent: "center",
+                      placeItems: "center",
+                    }}>
+                      {tiles.map((t) => (
+                        <Box key={t.id} sx={{ width: "100%", aspectRatio: "16/9" }}>
+                          {renderTile(t, {})}
+                        </Box>
+                      ))}
+                    </Box>
+                  );
+                })()}
+
+                {isChatOpen && (
+                  <Box sx={{
+                    width: { xs: "100%", sm: 340 },
+                    borderLeft: "1px solid rgba(255,255,255,0.08)",
+                    bgcolor: "#0b0b10",
+                    display: "flex",
+                    flexDirection: "column",
+                    p: 1.5,
+                  }}>
+                    <ChatPanel
+                      roomId={roomId}
+                      localParticipantId={localParticipantId}
+                      participants={participants}
+                      fullHeight
+                    />
+                  </Box>
+                )}
+              </Box>
+
+              {/* Bottom control bar */}
+              <Stack direction="row" spacing={1.25} justifyContent="center" alignItems="center" sx={{ py: 2, px: 2, borderTop: "1px solid rgba(255,255,255,0.08)", bgcolor: "rgba(0,0,0,0.6)" }}>
+                <Tooltip title={micEnabled ? "Mute mic" : "Unmute mic"}>
+                  <IconButton onClick={toggleMic} sx={{ bgcolor: micEnabled ? "rgba(255,255,255,0.08)" : "error.main", color: "white", width: 44, height: 44, "&:hover": { bgcolor: micEnabled ? "rgba(255,255,255,0.16)" : "error.dark" } }}>
+                    {micEnabled ? <MicIcon /> : <MicOffIcon />}
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title={camEnabled ? "Stop camera" : "Start camera"}>
+                  <IconButton onClick={toggleCam} sx={{ bgcolor: camEnabled ? "rgba(255,255,255,0.08)" : "error.main", color: "white", width: 44, height: 44, "&:hover": { bgcolor: camEnabled ? "rgba(255,255,255,0.16)" : "error.dark" } }}>
+                    {camEnabled ? <VideocamIcon /> : <VideocamOffIcon />}
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title={isSharingScreen ? "Stop sharing" : "Share screen"}>
+                  <IconButton onClick={toggleScreenShare} sx={{ bgcolor: isSharingScreen ? "primary.main" : "rgba(255,255,255,0.08)", color: "white", width: 44, height: 44, "&:hover": { bgcolor: isSharingScreen ? "primary.dark" : "rgba(255,255,255,0.16)" } }}>
+                    {isSharingScreen ? <StopScreenShareIcon /> : <ScreenShareIcon />}
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title={isChatOpen ? "Hide chat" : "Show chat"}>
+                  <IconButton onClick={() => setIsChatOpen((v) => !v)} sx={{ bgcolor: isChatOpen ? "primary.main" : "rgba(255,255,255,0.08)", color: "white", width: 44, height: 44, "&:hover": { bgcolor: isChatOpen ? "primary.dark" : "rgba(255,255,255,0.16)" } }}>
+                    <ForumOutlinedIcon />
+                  </IconButton>
+                </Tooltip>
+                <ReactionsButton onSend={sendReaction} />
+                <Tooltip title={speakerEnabled ? "Mute speaker" : "Unmute speaker"}>
+                  <IconButton onClick={toggleSpeaker} sx={{ bgcolor: "rgba(255,255,255,0.08)", color: speakerEnabled ? "white" : "error.main", width: 44, height: 44, "&:hover": { bgcolor: "rgba(255,255,255,0.16)" } }}>
+                    {speakerEnabled ? <VolumeUpIcon /> : <VolumeOffIcon />}
+                  </IconButton>
+                </Tooltip>
+                <Box sx={{ width: "1px", height: 28, bgcolor: "rgba(255,255,255,0.12)", mx: 0.5, flexShrink: 0 }} />
+                <Tooltip title="Leave call">
+                  <IconButton onClick={endCall} sx={{ bgcolor: "error.main", color: "white", width: 64, height: 44, borderRadius: "22px", "&:hover": { bgcolor: "error.dark" } }}>
+                    <CallEndIcon />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </Box>,
             document.body
           )}
         </>
       ) : (
-        <JoinWrapper>
-          <JoinButton onClick={startCall}>
-            Join Call
-          </JoinButton>
-        </JoinWrapper>
+        <Button variant="contained" fullWidth onClick={startCall}>
+          Join Call
+        </Button>
       )}
-    </Panel>
+    </Paper>
   );
 };

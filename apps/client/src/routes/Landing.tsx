@@ -1,247 +1,210 @@
-import { useRef, useState } from "react";
+import { useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import styled from "styled-components";
-import { nanoid } from "nanoid";
-import { Hero } from "../components/Hero";
-import { JoinDialog } from "../components/JoinDialog";
-import { RoomPreview } from "../components/RoomPreview";
+import AppBar from "@mui/material/AppBar";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import MuiCard from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Chip from "@mui/material/Chip";
+import Container from "@mui/material/Container";
+import Divider from "@mui/material/Divider";
+import InputAdornment from "@mui/material/InputAdornment";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Toolbar from "@mui/material/Toolbar";
+import Typography from "@mui/material/Typography";
+import CodeIcon from "@mui/icons-material/Code";
+import VideocamIcon from "@mui/icons-material/Videocam";
+import BrushIcon from "@mui/icons-material/Brush";
+import LockIcon from "@mui/icons-material/Lock";
+import GroupIcon from "@mui/icons-material/Group";
+import MeetingRoomIcon from "@mui/icons-material/MeetingRoom";
+import LoginIcon from "@mui/icons-material/Login";
+import { motion } from "framer-motion";
 import { api } from "../lib/api";
+import { ColorModeToggle } from "../components/ColorModeToggle";
 
-const Shell = styled.main`
-  min-height: 100vh;
-  width: 100%;
-  padding: clamp(1.5rem, 4vw, 4rem);
-  background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.08), transparent 45%),
-    radial-gradient(circle at 80% 0%, rgba(167, 149, 255, 0.15), transparent 40%),
-    #040405;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
-`;
+const MotionTypography = motion(Typography);
+const MotionStack = motion(Stack);
 
-const Grid = styled.div`
-  position: relative;
-  width: min(1200px, 100%);
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: clamp(2rem, 3vw, 3.5rem);
-  z-index: 2;
-`;
-
-const AccentColumn = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-`;
-
-const InsightPanel = styled.section`
-  padding: 1.75rem;
-  border-radius: 0px;
-  background: rgba(9, 9, 10, 0.85);
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  box-shadow: ${({ theme }) => theme.shadows.card};
-  display: grid;
-  gap: 1.1rem;
-`;
-
-const InsightTitle = styled.h3`
-  margin: 0;
-  font-size: 1.1rem;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: ${({ theme }) => theme.colors.textMuted};
-  border-left: 3px solid ${({ theme }) => theme.colors.accent};
-  padding-left: 0.75rem;
-`;
-
-const InsightDescriptor = styled.p`
-  margin: 0;
-  color: ${({ theme }) => theme.colors.text};
-  font-size: 1.2rem;
-  line-height: 1.6;
-`;
-
-const AccentList = styled.ul`
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.65rem;
-  color: ${({ theme }) => theme.colors.textMuted};
-`;
-
-const AccentChip = styled.li`
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  font-size: 0.95rem;
-  &:before {
-    content: "";
-    width: 0; 
-    height: 0; 
-    border-left: 6px solid ${({ theme }) => theme.colors.accent};
-    border-top: 4px solid transparent;
-    border-bottom: 4px solid transparent;
-  }
-`;
-
-const ActiveRoomChip = styled.div`
-  align-self: flex-start;
-  padding: 0.55rem 1rem;
-  border-radius: 0px;
-  border: 1px solid ${({ theme }) => theme.colors.accent};
-  background: ${({ theme }) => theme.colors.surface};
-  font-family: ${({ theme }) => theme.fonts.mono};
-  font-size: 0.85rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: ${({ theme }) => theme.colors.accent};
-  box-shadow: 4px 4px 0px ${({ theme }) => theme.colors.accent};
-`;
-
-const Toast = styled.div<{ $visible: boolean }>`
-  position: fixed;
-  bottom: 2rem;
-  right: 2rem;
-  padding: 1rem 1.5rem;
-  border-radius: 0px;
-  background: #000;
-  border: 1px solid ${({ theme }) => theme.colors.accent};
-  color: ${({ theme }) => theme.colors.text};
-  font-size: 0.95rem;
-  box-shadow: 8px 8px 0px ${({ theme }) => theme.colors.accent};
-  opacity: ${({ $visible }) => ($visible ? 1 : 0)};
-  transform: translateY(${({ $visible }) => ($visible ? "0" : "15px")});
-  transition: opacity 180ms ease, transform 180ms ease;
-  pointer-events: none;
-`;
-
-const Glow = styled.div`
-  position: absolute;
-  inset: auto -20% 10% auto;
-  width: 420px;
-  height: 420px;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.15), transparent 70%);
-  filter: blur(60px);
-  opacity: 0.5;
-  pointer-events: none;
-`;
+const FEATURES = [
+  { icon: <CodeIcon fontSize="small" />, label: "Multi-language editor" },
+  { icon: <VideocamIcon fontSize="small" />, label: "Mesh video calls" },
+  { icon: <BrushIcon fontSize="small" />, label: "Collaborative whiteboard" },
+  { icon: <GroupIcon fontSize="small" />, label: "No account needed" },
+  { icon: <LockIcon fontSize="small" />, label: "30-day auto-expiry" },
+];
 
 export const LandingRoute = () => {
   const navigate = useNavigate();
-  const [isJoinOpen, setJoinOpen] = useState(false);
-  const [dialogMode, setDialogMode] = useState<"join" | "create">("join");
+  const [joinCode, setJoinCode] = useState("");
+  const [joinError, setJoinError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [isJoining, setIsJoining] = useState(false);
-  const [lastRoomCode, setLastRoomCode] = useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const toastTimer = useRef<number | null>(null);
 
-  const pushToast = (message: string) => {
-    setToastMessage(message);
-    if (toastTimer.current) {
-      window.clearTimeout(toastTimer.current);
+  const handleCreate = async () => {
+    setIsCreating(true);
+    try {
+      const room = await api.createRoom();
+      navigate(`/room/${room.roomId}`);
+    } catch (e) {
+      setJoinError(e instanceof Error ? e.message : "Failed to create room");
+      setIsCreating(false);
     }
-    toastTimer.current = window.setTimeout(() => {
-      setToastMessage(null);
-      toastTimer.current = null;
-    }, 3600);
   };
 
-  const handleCreateClick = () => {
-    setDialogMode("create");
-    setJoinOpen(true);
+  const handleJoin = () => {
+    const code = joinCode.trim();
+    if (!code) { setJoinError("Enter a room code to join"); return; }
+    navigate(`/room/${code}`);
   };
 
-  const handleJoinClick = () => {
-    setDialogMode("join");
-    setJoinOpen(true);
+  const handleJoinCodeChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setJoinCode(e.target.value);
+    if (joinError) setJoinError(null);
   };
 
-  const handleDialogSubmit = async (roomCode: string, displayName: string) => {
-    if (dialogMode === "create") {
-      try {
-        setIsCreating(true);
-        const snapshot = await api.createRoom(displayName);
-        setLastRoomCode(snapshot.roomId);
-        await navigator.clipboard?.writeText(snapshot.roomId).catch(() => undefined);
-        
-        if (displayName) {
-          localStorage.setItem("vaartalaap:displayName", displayName);
-        }
-
-        // The host is the first participant
-        const hostParticipant = snapshot.participants[0];
-
-        pushToast(`Room minted • ${snapshot.roomId}`);
-        navigate(`/room/${snapshot.roomId}`, { 
-          state: { 
-            joined: true, 
-            participantId: hostParticipant?.id,
-            displayName: displayName
-          } 
-        });
-      } catch (error) {
-        pushToast(error instanceof Error ? error.message : "Unable to create room");
-      } finally {
-        setIsCreating(false);
-      }
-    } else {
-      try {
-        setIsJoining(true);
-        const participantId = nanoid();
-        const snapshot = await api.joinRoom(roomCode, displayName, participantId);
-        setLastRoomCode(snapshot.roomId);
-        
-        if (displayName) {
-          localStorage.setItem("vaartalaap:displayName", displayName);
-        }
-
-        pushToast(`Room ready • ${snapshot.roomId}`);
-        navigate(`/room/${snapshot.roomId}`, { 
-          state: { 
-            joined: true, 
-            participantId: participantId,
-            displayName: displayName
-          } 
-        });
-      } catch (error) {
-        pushToast(error instanceof Error ? error.message : "Room lookup failed");
-      } finally {
-        setIsJoining(false);
-      }
-    }
+  const handleJoinKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") handleJoin();
   };
 
   return (
-    <Shell>
-      <Glow />
-      <Grid>
-        <div>
-          <Hero
-            onCreateRoom={handleCreateClick}
-            onJoinRoom={handleJoinClick}
-            isCreating={isCreating}
-            isJoining={isJoining}
-          />
-          {lastRoomCode && <ActiveRoomChip>Active code · {lastRoomCode}</ActiveRoomChip>}
-        </div>
-        <AccentColumn>
-          <RoomPreview />
+    <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column", bgcolor: "background.default", position: "relative", overflow: "hidden" }}>
+      {/* Background glow orbs */}
+      <Box sx={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0 }}>
+        <Box sx={{ position: "absolute", width: 700, height: 700, borderRadius: "50%", background: "radial-gradient(circle, rgba(79,99,255,0.1) 0%, transparent 70%)", top: -200, left: -200 }} />
+        <Box sx={{ position: "absolute", width: 500, height: 500, borderRadius: "50%", background: "radial-gradient(circle, rgba(139,158,255,0.07) 0%, transparent 70%)", bottom: -100, right: -100 }} />
+      </Box>
 
-        </AccentColumn>
-      </Grid>
-      <JoinDialog 
-        open={isJoinOpen} 
-        mode={dialogMode}
-        onClose={() => setJoinOpen(false)} 
-        onSubmit={handleDialogSubmit} 
-      />
-      <Toast $visible={Boolean(toastMessage)} aria-live="polite">
-        {toastMessage ?? ""}
-      </Toast>
-    </Shell>
+      {/* Nav */}
+      <AppBar position="static" elevation={0} sx={{ zIndex: 1 }}>
+        <Toolbar sx={{ justifyContent: "space-between" }}>
+          <Typography variant="h6" sx={{ fontWeight: 900, letterSpacing: "0.2em", fontSize: "1rem" }}>
+            VAARTALAAP
+          </Typography>
+          <ColorModeToggle />
+        </Toolbar>
+      </AppBar>
+
+      {/* Hero */}
+      <Container
+        maxWidth="md"
+        sx={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", py: { xs: 6, md: 10 }, position: "relative", zIndex: 1, textAlign: "center" }}
+      >
+        <Typography variant="overline" color="primary" sx={{ mb: 2 }}>
+          Interview &amp; learning platform
+        </Typography>
+
+        <MotionTypography
+          variant="h1"
+          sx={{
+            fontSize: { xs: "3rem", md: "5.5rem", lg: "7rem" },
+            fontWeight: 900,
+            letterSpacing: "-0.04em",
+            lineHeight: 0.95,
+            mb: 3,
+            "& span": {
+              background: "linear-gradient(135deg, #4f63ff 0%, #8b9eff 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+            },
+          }}
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          Code together.<br /><span>Learn together.</span>
+        </MotionTypography>
+
+        <MotionTypography
+          variant="body1"
+          color="text.secondary"
+          sx={{ maxWidth: 520, lineHeight: 1.7, mb: 5, fontSize: "1.1rem" }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+        >
+          A live workspace for DSA, system design, and mock interviews —
+          shared code editor, whiteboard, notes, and mesh video calls in one
+          room. No account required.
+        </MotionTypography>
+
+        <MotionStack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={2}
+          sx={{ width: "100%", maxWidth: 700 }}
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.2 }}
+        >
+          {/* Create card */}
+          <MuiCard variant="outlined" sx={{ flex: 1, bgcolor: "background.paper", transition: "border-color 0.2s, transform 0.2s", "&:hover": { borderColor: "primary.main", transform: "translateY(-3px)" } }}>
+            <CardContent sx={{ p: 3, display: "flex", flexDirection: "column", gap: 1.5 }}>
+              <Typography variant="overline" color="primary">New session</Typography>
+              <Typography variant="h5">Create a Room</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Generate a shareable room link instantly. Set your handle on the next screen.
+              </Typography>
+              <Button
+                variant="contained"
+                size="large"
+                fullWidth
+                startIcon={<MeetingRoomIcon />}
+                onClick={handleCreate}
+                disabled={isCreating}
+              >
+                {isCreating ? "Spinning up…" : "Create Room"}
+              </Button>
+            </CardContent>
+          </MuiCard>
+
+          {/* Join card */}
+          <MuiCard variant="outlined" sx={{ flex: 1, bgcolor: "background.paper", transition: "border-color 0.2s, transform 0.2s", "&:hover": { borderColor: "primary.main", transform: "translateY(-3px)" } }}>
+            <CardContent sx={{ p: 3, display: "flex", flexDirection: "column", gap: 1.5 }}>
+              <Typography variant="overline" color="primary">Enter existing</Typography>
+              <Typography variant="h5">Join a Room</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Have a room code? Paste it below and drop straight in.
+              </Typography>
+              <TextField
+                fullWidth
+                size="medium"
+                placeholder="Room ID or code"
+                value={joinCode}
+                onChange={handleJoinCodeChange}
+                onKeyDown={handleJoinKeyDown}
+                error={Boolean(joinError)}
+                helperText={joinError ?? " "}
+                slotProps={{
+                  input: {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <Button variant="contained" size="small" onClick={handleJoin} startIcon={<LoginIcon />}>
+                          Join
+                        </Button>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
+            </CardContent>
+          </MuiCard>
+        </MotionStack>
+      </Container>
+
+      {/* Feature bar */}
+      <Box sx={{ borderTop: "1px solid", borderColor: "divider", py: 1.5, position: "relative", zIndex: 1 }}>
+        <Stack direction="row" sx={{ justifyContent: "center", flexWrap: "wrap" }} divider={<Divider orientation="vertical" flexItem />}>
+          {FEATURES.map(({ icon, label }) => (
+            <Stack key={label} direction="row" spacing={0.75} sx={{ alignItems: "center", px: 2.5, py: 0.75, color: "text.secondary" }}>
+              <Box sx={{ color: "primary.main", display: "flex" }}>{icon}</Box>
+              <Typography variant="caption" sx={{ fontSize: "0.78rem" }}>{label}</Typography>
+            </Stack>
+          ))}
+        </Stack>
+      </Box>
+    </Box>
   );
 };
+
+

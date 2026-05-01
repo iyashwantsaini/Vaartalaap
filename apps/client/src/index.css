@@ -1,33 +1,116 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
+
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  color-scheme: dark;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+*, *::before, *::after {
+  box-sizing: border-box;
 }
-a:hover {
-  color: #535bf2;
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  background-color: #09090d;
+  color: #f4f4ff;
+}
+
+::selection {
+  background: #4f63ff;
+  color: #fff;
+}
+
+/* Thin scrollbars */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #09090d; }
+::-webkit-scrollbar-thumb { background: #22222e; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4f63ff; }
+
+/* ---------------------------------------------------------------------- */
+/* Yjs / y-codemirror.next remote cursor styling.                         */
+/* y-codemirror.next renders each remote cursor as:                       */
+/*   <span class="cm-ySelectionCaret" style="color: …; border-color: …">  */
+/*     <div class="cm-ySelectionCaretDot" />                              */
+/*     <div class="cm-ySelectionInfo">user name</div>                     */
+/*   </span>                                                              */
+/* The element's inline `color` is the user's chosen colour; we use that  */
+/* as both the caret stroke and the label background.                     */
+
+/* CodeMirror clips overflow on .cm-content by default which hides the    */
+/* floating name label. We give the editor view a small top padding so    */
+/* the label has somewhere to live, and force overflow visible on lines.  */
+.cm-editor .cm-line {
+  overflow: visible;
+}
+.cm-editor .cm-content {
+  /* room for floating user-name labels above the first line */
+  padding-top: 1.4em;
+}
+
+.cm-ySelectionCaret {
+  position: relative;
+  border-left: 2px solid;
+  border-right: 2px solid;
+  border-color: currentColor;
+  margin-left: -1px;
+  margin-right: -1px;
+  box-sizing: border-box;
+  display: inline-block;
+  height: 1.2em;
+  vertical-align: text-top;
+  z-index: 50;
+}
+
+.cm-ySelectionCaretDot {
+  border-radius: 50%;
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  top: -3px;
+  left: -4px;
+  background-color: currentColor;
+  pointer-events: none;
+}
+
+/* The user-name label that floats above each remote caret. */
+.cm-ySelectionInfo {
+  position: absolute;
+  top: -1.35em;
+  left: -2px;
+  font-size: 0.7rem;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif;
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+  /* Force white text regardless of the cursor's currentColor cascade. */
+  color: #ffffff !important;
+  padding: 3px 6px;
+  white-space: nowrap;
+  border-radius: 3px;
+  /* Background uses currentColor (the user's awareness colour). */
+  background-color: currentColor;
+  pointer-events: none;
+  z-index: 100;
+  opacity: 1;
+  /* Subtle drop shadow so the label is readable on any code colour. */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  /* Slight delay-then-fade so labels feel less jumpy when cursors move,
+     but remain visible long enough to read. */
+  transition: opacity 0.2s ease-out;
+}
+
+/* Remote selections — y-codemirror.next applies inline background. */
+.cm-ySelection {
+  /* Sometimes the inline background can clash with the editor's own
+     selection; ensure the remote selection is visible behind text. */
+  z-index: 0;
 }
 
 h1 {

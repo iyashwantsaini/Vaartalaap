@@ -1,2 +1,2 @@
-declare module "@cred/neopop-web/lib/components";
+// Add module declarations here as needed
 declare module "@fontsource-variable/inter";

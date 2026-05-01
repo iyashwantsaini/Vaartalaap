@@ -21,8 +21,8 @@
   "dependencies": {
     "@codemirror/lang-cpp": "^6.0.3",
     "@codemirror/lang-markdown": "^6.5.0",
-    "@tiptap/extension-placeholder": "^3.11.0",
-    "@tiptap/react": "^3.11.0",
-    "@tiptap/starter-kit": "^3.11.0"
+    "@tiptap/extension-placeholder": "^3.22.5",
+    "@tiptap/react": "^3.22.5",
+    "@tiptap/starter-kit": "^3.22.5"
   }
 }

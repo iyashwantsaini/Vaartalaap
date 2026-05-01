@@ -69,24 +69,16 @@ const normalizeRoom = (doc: RoomDocument | null): RoomSnapshot | null => {
 class RoomService {
   #collection = () => getCollection<RoomDocument>("rooms");
 
-  async createRoom(payload: CreateRoomPayload = {}): Promise<RoomSnapshot> {
+  async createRoom(_payload: CreateRoomPayload = {}): Promise<RoomSnapshot> {
     const roomId = randomUUID();
     const now = new Date().toISOString();
-
-    const host: ParticipantSummary = {
-      id: randomUUID(),
-      displayName: payload.hostName ?? "Host",
-      role: "participant",
-      audioEnabled: false,
-      videoEnabled: false,
-    };
 
     const snapshot: RoomSnapshot = {
       roomId,
       createdAt: now,
       updatedAt: now,
       activeTab: "code",
-      participants: [host],
+      participants: [],
       documents: ensureDocuments(),
     };
 
