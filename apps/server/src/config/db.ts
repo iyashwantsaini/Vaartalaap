@@ -17,10 +17,20 @@ export const initDb = async (): Promise<Db> => {
   logger.info(`Connected to MongoDB • ${database.databaseName}`);
 
   await database.collection("rooms").createIndex({ roomId: 1 }, { unique: true });
-  // TTL: auto-expire rooms after 30 days
+  // TTL: auto-expire rooms after 30 days (rooms.createdAt set on insert).
   await database
     .collection("rooms")
     .createIndex({ createdAt: 1 }, { expireAfterSeconds: 2592000 });
+
+  // yjsDocs: composite uniqueness + TTL on updatedAt. 30 days of inactivity
+  // ⇒ doc is dropped. updatedAt is refreshed on every persist, so active
+  // docs never expire while the room is in use.
+  await database
+    .collection("yjsDocs")
+    .createIndex({ roomId: 1, docName: 1 }, { unique: true });
+  await database
+    .collection("yjsDocs")
+    .createIndex({ updatedAt: 1 }, { expireAfterSeconds: 2592000 });
 
   return database;
 };

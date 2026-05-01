@@ -27,7 +27,7 @@ interface YjsDocRecord {
   roomId: string;
   docName: string;
   state: Binary;
-  updatedAt: string;
+  updatedAt: Date;
 }
 
 class YjsService {
@@ -122,7 +122,7 @@ class YjsService {
             roomId,
             docName,
             state: new Binary(Buffer.from(state)),
-            updatedAt: new Date().toISOString(),
+            updatedAt: new Date(),
           },
         },
         { upsert: true }
