@@ -2,7 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from "express"
 import rateLimit from "express-rate-limit";
 import createHttpError from "http-errors";
 import { z } from "zod";
-import { roomService } from "../services/roomService";
+import { roomService } from "../services/roomService.js";
 
 const createRoomLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour

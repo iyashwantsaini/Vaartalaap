@@ -1,10 +1,10 @@
 import type { Server as HTTPServer } from "http";
 import { Server } from "socket.io";
 import type { RoomDocuments, RoomTab } from "@vaartalaap/shared";
-import { env } from "./env";
-import { roomService } from "../services/roomService";
-import { yjsService } from "../services/yjsService";
-import { logger } from "../lib/logger";
+import { env } from "./env.js";
+import { roomService } from "../services/roomService.js";
+import { yjsService } from "../services/yjsService.js";
+import { logger } from "../lib/logger.js";
 
 interface JoinRoomPayload {
   roomId: string;

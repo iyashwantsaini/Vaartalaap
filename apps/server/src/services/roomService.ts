@@ -7,7 +7,7 @@ import type {
 } from "@vaartalaap/shared";
 import { randomUUID } from "crypto";
 import type { ObjectId } from "mongodb";
-import { getCollection } from "../config/db";
+import { getCollection } from "../config/db.js";
 
 interface CreateRoomPayload {
   hostName?: string;

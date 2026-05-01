@@ -5,11 +5,11 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import createHttpError, { isHttpError, type HttpError } from "http-errors";
 
-import { env } from "./config/env";
-import { bootstrapSocket } from "./config/socket";
-import { roomRouter } from "./routes/roomRoutes";
-import { logger } from "./lib/logger";
-import { initDb } from "./config/db";
+import { env } from "./config/env.js";
+import { bootstrapSocket } from "./config/socket.js";
+import { roomRouter } from "./routes/roomRoutes.js";
+import { logger } from "./lib/logger.js";
+import { initDb } from "./config/db.js";
 
 const app = express();
 

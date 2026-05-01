@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import { Binary } from "mongodb";
-import { getCollection } from "../config/db";
-import { logger } from "../lib/logger";
+import { getCollection } from "../config/db.js";
+import { logger } from "../lib/logger.js";
 
 // One Y.Doc per (roomId, docName). Kept in memory for the lifetime of the
 // process so we can apply updates and serve sync responses cheaply. Persisted

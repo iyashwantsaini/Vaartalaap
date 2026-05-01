@@ -1,7 +1,7 @@
 import type { Collection, Db, Document } from "mongodb";
 import { MongoClient } from "mongodb";
-import { env } from "./env";
-import { logger } from "../lib/logger";
+import { env } from "./env.js";
+import { logger } from "../lib/logger.js";
 
 let client: MongoClient | null = null;
 let database: Db | null = null;
