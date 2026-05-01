@@ -1,0 +1,37 @@
+# Fly.io config — Vaartalaap API + WebSocket server.
+# Created with: fly launch --no-deploy --copy-config
+# Deploy with:  fly deploy
+# Free allowance: 3 shared-cpu-1x VMs, 256 MB each. Keep min_machines_running=1
+# to avoid cold starts (uses ~24h × 30d = 720h, within free 2,340h pool).
+
+app = "vaartalaap-api"
+primary_region = "iad"   # change to your nearest: sjc, fra, sin, syd, etc.
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "4000"
+  # MONGODB_URI and CLIENT_ORIGIN are set as secrets via:
+  #   fly secrets set MONGODB_URI="mongodb+srv://..." CLIENT_ORIGIN="https://your-app.vercel.app"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = "stop"     # stop when idle to stay within free pool
+  auto_start_machines = true       # auto-wake on incoming request (~2-5s)
+  min_machines_running = 0         # set to 1 to keep always-warm
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  cpus = 1

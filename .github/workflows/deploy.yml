@@ -7,18 +7,20 @@ on:
 
 # Deploys both services on every push to main.
 # Required GitHub repo secrets (Settings → Secrets and variables → Actions):
-#   RENDER_DEPLOY_HOOK_URL  — full URL from Render service → Settings → Deploy Hook
+#   FLY_API_TOKEN           — `fly tokens create deploy --expiry 8760h`
 #   VERCEL_TOKEN            — https://vercel.com/account/tokens
 #   VERCEL_ORG_ID           — from `vercel link` (.vercel/project.json) or dashboard
 #   VERCEL_PROJECT_ID       — same source
 jobs:
   deploy-api:
-    name: Trigger Render deploy
+    name: Deploy API to Fly.io
     runs-on: ubuntu-latest
     steps:
-      - name: Hit Render deploy hook
-        run: |
-          curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
   deploy-client:
     name: Build & deploy SPA to Vercel

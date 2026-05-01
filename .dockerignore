@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.github
+.vscode
+.env
+.env.*
+docs
+apps/client/src
+apps/client/public
+apps/client/index.html
+apps/client/vite.config.ts
+apps/client/tsconfig*.json
+apps/client/eslint.config.js
+README.md
