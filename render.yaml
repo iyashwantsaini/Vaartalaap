@@ -10,7 +10,8 @@ services:
     region: oregon
     rootDir: .
     # Build the shared workspace first, then the server.
-    buildCommand: npm install --legacy-peer-deps && npm --workspace @vaartalaap/shared run build && npm --workspace @vaartalaap/server run build
+    # --include=dev forces TypeScript + @types/* to install even when NODE_ENV=production.
+    buildCommand: npm install --legacy-peer-deps --include=dev && npm --workspace @vaartalaap/shared run build && npm --workspace @vaartalaap/server run build
     startCommand: node apps/server/dist/index.js
     healthCheckPath: /health
     autoDeploy: true
