@@ -101,16 +101,53 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-  s1[New → Web Service] --> s2[Connect GitHub repo]
-  s2 --> s3[Root dir: apps/server<br/>Build: npm i && npm run build<br/>Start: npm start]
-  s3 --> s4[Set env vars]
-  s4 --> s5[Enable WebSocket support<br/>auto-on for Web Services]
-  s5 --> s6[Deploy]
+  s1[New + → Web Service] --> s2[Connect GitHub repo]
+  s2 --> s3[Root dir: blank<br/>Runtime: Node<br/>Plan: Free]
+  s3 --> s4[Build & Start commands<br/>see below]
+  s4 --> s5[Set env vars + NODE_VERSION]
+  s5 --> s6[Health check path: /health]
+  s6 --> s7[Deploy]
 ```
 
-`apps/server/package.json` scripts:
-- `build` → `tsc -p tsconfig.json`
-- `start` → `node dist/index.js`
+**Build command** (must include `--include=dev` because Render sets `NODE_ENV=production`, which strips devDeps where `@types/*` and `typescript` live):
+
+```bash
+npm install --legacy-peer-deps --include=dev \
+  && npm --workspace @vaartalaap/shared run build \
+  && npm --workspace @vaartalaap/server run build
+```
+
+**Start command:**
+
+```bash
+node apps/server/dist/index.js
+```
+
+**Env vars (all required):**
+
+| Key | Value | Notes |
+|---|---|---|
+| `NODE_VERSION` | `20.18.0` | Pin Node 20 — Render's default Node 24 has issues with our TS deprecations |
+| `NODE_ENV` | `production` | |
+| `PORT` | `4000` | |
+| `MONGODB_URI` | `mongodb+srv://...` | Must include database name (e.g. `/vaartalaap` before `?`) |
+| `CLIENT_ORIGIN` | `https://your-app.vercel.app` | **No trailing slash** — CORS does exact match |
+
+Free tier card requirement: Render now requires a card on file even for the Free plan (anti-abuse). They never auto-charge — only an explicit upgrade triggers billing.
+
+---
+
+## 6a. Render gotchas (real failures we hit)
+
+```mermaid
+flowchart TB
+  E1[TS5101/5107: baseUrl deprecated] --> F1[Add ignoreDeprecations: '5.0' in tsconfig.base.json]
+  E2[TS7016: Cannot find @types/express] --> F2[Build cmd must include --include=dev<br/>NODE_ENV=production strips devDeps]
+  E3[ERR_MODULE_NOT_FOUND on ./config/env] --> F3[Add .js extensions to all relative imports<br/>Node ESM strict resolver requires them]
+  E4[ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR Mongo] --> F4[Atlas Network Access → 0.0.0.0/0<br/>Render free has no static egress IP]
+  E5[Build OK but No open ports detected] --> F5[Check Application Logs for thrown errors before listen]
+  E6[CORS rejected from prod SPA] --> F6[CLIENT_ORIGIN must NOT have trailing slash]
+```
 
 ---
 
@@ -119,12 +156,35 @@ flowchart TB
 ```mermaid
 flowchart TB
   v1[Add new project] --> v2[Connect GitHub repo]
-  v2 --> v3[Framework: Vite<br/>Root: apps/client<br/>Build: npm run build<br/>Output: dist]
+  v2 --> v3[Framework Preset: Other<br/>Root Directory: ./<br/>vercel.json drives everything]
   v3 --> v4[Env: VITE_API_BASE]
   v4 --> v5[Deploy]
 ```
 
-If using monorepo with `workspaces`, set `Install Command` = `cd ../.. && npm install` so the workspace `@vaartalaap/shared` resolves.
+[vercel.json](../vercel.json) sets:
+- `installCommand`: `npm install --legacy-peer-deps`
+- `buildCommand`: builds shared workspace then client
+- `outputDirectory`: `apps/client/dist`
+- SPA rewrites for client-side routing
+
+**Critical**: Framework Preset must be **Other**, not Vite. The Vite preset hardcodes `outputDirectory=dist` and ignores [vercel.json](../vercel.json), causing "No Output Directory named 'dist' found".
+
+**Env var:**
+
+| Key | Value | Notes |
+|---|---|---|
+| `VITE_API_BASE` | `https://your-api.onrender.com` | No trailing slash. Baked at build time — must redeploy after change |
+
+---
+
+## 7a. Vercel gotchas
+
+```mermaid
+flowchart TB
+  V1[Rollup: cannot resolve @codemirror/lang-cpp] --> W1[Move client-only deps from root package.json<br/>into apps/client/package.json]
+  V2[No Output Directory dist found] --> W2[Framework Preset: Other<br/>or override Output Directory to apps/client/dist]
+  V3[Client uses old VITE_API_BASE] --> W3[Env vars are baked at build<br/>must redeploy after env change]
+```
 
 ---
 
@@ -172,14 +232,29 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-  Push[git push main] --> Build[Vercel + Render auto-build]
-  Build --> Live[Live]
+  Push[git push main] --> GH[GitHub webhook]
+  GH --> V[Vercel build & deploy]
+  GH --> R[Render build & deploy]
+  V --> Live
+  R --> Live
   Bad[Regression] --> Rollback{Rollback}
   Rollback -- Vercel --> Vroll[Promote previous deployment]
   Rollback -- Render --> Rroll[Re-deploy previous commit]
 ```
 
-Both providers retain the last ~10 deployments; rollback is one click.
+Both providers listen to GitHub webhooks themselves — no GitHub Actions tokens or secrets needed. CI workflow ([.github/workflows/ci.yml](../.github/workflows/ci.yml)) runs `tsc + vite build` on every push as a regression guard before the providers build.
+
+Rollback: each provider retains the last ~10 deployments; one-click promote.
+
+---
+
+## 11a. Live URLs (reference deployment)
+
+| Service | URL |
+|---|---|
+| SPA | https://vaartalaapclient.vercel.app |
+| API | https://vaartalaap-api-edao.onrender.com |
+| Health | https://vaartalaap-api-edao.onrender.com/health |
 
 ---
 
