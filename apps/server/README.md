@@ -60,6 +60,8 @@ sequenceDiagram
     Note over C,S: Code (Yjs)
     C->>S: yjs:sync-request (sv)
     S-->>C: yjs:sync-response (diff)
+    C->>S: yjs:seed-if-empty (template)
+    S-->>C: yjs:update (broadcast to all peers)
     C->>S: yjs:update (Uint8Array)
     S-->>C: yjs:update (relay to others)
     S->>DB: debounce 1.5s — encodeStateAsUpdate
@@ -119,11 +121,15 @@ flowchart LR
   Apply -. debounce 1.5s .-> Persist[encodeStateAsUpdate → Mongo]
   Sync[yjs:sync-request sv] --> Diff[encodeStateAsUpdate(doc, sv)]
   Diff --> Out[yjs:sync-response]
+  Seed[yjs:seed-if-empty] --> Check{ytext.length == 0?}
+  Check -- yes --> Insert[Y.transact insert template] --> BcastAll[io.to(room) yjs:update]
+  Check -- no --> Nack[ack seeded:false]
 ```
 
 Caps:
 - `MAX_DOC_BYTES = 1 MB` per `(roomId,docName)` — drops further updates when exceeded.
 - Awareness packets are **never** persisted.
+- `yjs:seed-if-empty` is the **single source of truth for first-write template seeding**. The server's atomic empty-check + insert prevents duplicate seeds when two clients open the same fresh room simultaneously; only the first request wins, the rest get `{seeded:false}` and pick up the canonical seed via the broadcast `yjs:update`.
 
 ---
 

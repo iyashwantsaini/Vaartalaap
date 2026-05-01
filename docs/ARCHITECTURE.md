@@ -199,6 +199,7 @@ flowchart LR
     c7[yjs:awareness]
     c8[rtc:signal]
     c9[reaction:send]
+    c10[yjs:seed-if-empty]
   end
   subgraph Server
     direction TB
@@ -232,6 +233,7 @@ flowchart LR
 | C → S | `chat:send` | `{text}` | yes (capped 200) |
 | C → S | `yjs:update` | `Uint8Array` | yes, debounced 1.5s |
 | C → S | `yjs:awareness` | `Uint8Array` | no (transient) |
+| C → S | `yjs:seed-if-empty` | `{docName, textKey, text}` → ack `{seeded}` | yes (if winner) |
 | C → S | `rtc:signal` | `{to, sdp\|candidate}` | no |
 | S → C | `peers:update` | `Participant[]` | — |
 | S → C | `room:state` | `RoomSnapshot` | — |
@@ -271,6 +273,8 @@ Key invariants:
 - Awareness (cursors) is never persisted.
 - Doc cache is `Map<roomId+docName, Y.Doc>`; lazy-hydrated from Mongo on first reference.
 - Per-doc cap: `MAX_DOC_BYTES = 1 MB`.
+- **Initial template seeding is server-authoritative.** When a fresh room is opened, the client emits `yjs:seed-if-empty` instead of inserting locally. The server checks the in-memory `Y.Text` length atomically (Node is single-threaded), inserts the template iff empty, and broadcasts the resulting update to every peer in the room. This prevents two simultaneous fresh opens from each seeding the template and producing a duplicated buffer after CRDT merge.
+- **`socket.join(roomId)` runs synchronously before any `await` in `room:join`.** socket.io does not pause event delivery while a handler is suspended on `await`, so deferring the join until after a Mongo round-trip would cause the client's immediately-following `yjs:sync-request` to be dropped (`socket.rooms.has(roomId) === false`).
 
 ---
 
