@@ -119,7 +119,13 @@ export const RoomRoute = () => {
     const joinedParticipantId = localParticipantId;
 
     const handleConnect = () => {
-      socket.emit("room:join", { roomId: joinedRoomId, participantId: joinedParticipantId });
+      // Send displayName too so the server can re-add us as a participant
+      // if we were dropped during a brief disconnect (grace-period removal).
+      socket.emit("room:join", {
+        roomId: joinedRoomId,
+        participantId: joinedParticipantId,
+        displayName: displayName || undefined,
+      });
       setIsSocketReady(true);
     };
 

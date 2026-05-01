@@ -124,7 +124,24 @@ class RoomService {
     });
 
     if (existingRoom) {
-      // If they exist, just return the room (or update details if needed)
+      // Existing participant: update their displayName if a new (non-empty)
+      // one was provided. Without this, a user who rejoins under a different
+      // handle ("karan_dev" → "yash_dev") would still appear under the old
+      // name to everyone else in the room.
+      const trimmed = payload.participantName?.trim();
+      if (trimmed) {
+        const updated = await this.#collection().findOneAndUpdate(
+          { roomId: payload.roomId, "participants.id": participantId },
+          {
+            $set: {
+              "participants.$.displayName": trimmed.slice(0, 64),
+              updatedAt: new Date().toISOString(),
+            },
+          },
+          { returnDocument: "after" }
+        );
+        return normalizeRoom((updated as RoomDocument | null) ?? existingRoom);
+      }
       return normalizeRoom(existingRoom);
     }
 
@@ -145,14 +162,24 @@ class RoomService {
       videoEnabled: false,
     };
 
+    // Atomic conditional push: only insert when participantId is NOT already
+    // in the array. Without `"participants.id": { $ne: ... }`, two parallel
+    // joins for the same pid (e.g. socket auto-reconnect racing the explicit
+    // re-emit) both pass the existence check and both $push, producing a
+    // duplicate entry.
     const room = await this.#collection().findOneAndUpdate(
-      { roomId: payload.roomId },
+      { roomId: payload.roomId, "participants.id": { $ne: participantId } },
       {
         $push: { participants: participant },
         $set: { updatedAt: new Date().toISOString() },
       },
       { returnDocument: "after" }
     );
+    if (!room) {
+      // Race: someone else inserted the same pid between our findOne and our
+      // updateOne. Re-fetch and return so the caller sees the latest state.
+      return this.getRoom(payload.roomId);
+    }
     return normalizeRoom((room as RoomDocument | null) ?? null);
   }
 

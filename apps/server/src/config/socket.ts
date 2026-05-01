@@ -9,6 +9,11 @@ import { logger } from "../lib/logger.js";
 interface JoinRoomPayload {
   roomId: string;
   participantId?: string;
+  // Sent on (re)join so the server can re-add the participant after a
+  // grace-period removal (network blip, dev HMR, mobile sleep). Without it
+  // the participant becomes a “ghost” — socket joined the broadcast group
+  // but never re-added to the room document.
+  displayName?: string;
 }
 
 interface DocumentChangePayload {
@@ -131,7 +136,7 @@ export const bootstrapSocket = (httpServer: HTTPServer) => {
     let yjsWindowStart = 0;
     let yjsWindowCount = 0;
 
-    socket.on("room:join", async ({ roomId, participantId }: JoinRoomPayload) => {
+    socket.on("room:join", async ({ roomId, participantId, displayName }: JoinRoomPayload) => {
       logger.info(`room:join from ${socket.id} for room ${roomId} participant ${participantId}`);
       if (!roomId || !participantId) {
         // Without a participantId we can't reliably clean up later, so refuse
@@ -149,13 +154,29 @@ export const bootstrapSocket = (httpServer: HTTPServer) => {
         socket.emit("room:error", { code: "room_not_found", roomId });
         return;
       }
-      // Capacity cap — socket clients can hit this path without going through
-      // POST /api/rooms/:id/join, so enforce here too.
+      // If the participant isn't in the DB any more (grace-period removal
+      // after a brief disconnect), re-add them now. Without this, a network
+      // blip / dev-HMR / mobile sleep silently turns the user into a ghost
+      // — their socket is in the io room but they don't show in the roster.
       const alreadyIn = dbRoom.participants?.some((p) => p.id === participantId) ?? false;
-      if (!alreadyIn && (dbRoom.participants?.length ?? 0) >= MAX_PARTICIPANTS_PER_ROOM) {
-        logger.warn(`room:join refused — room ${roomId} full from ${socket.id}`);
-        socket.emit("room:error", { code: "room_full", roomId });
-        return;
+      if (!alreadyIn) {
+        if ((dbRoom.participants?.length ?? 0) >= MAX_PARTICIPANTS_PER_ROOM) {
+          logger.warn(`room:join refused — room ${roomId} full from ${socket.id}`);
+          socket.emit("room:error", { code: "room_full", roomId });
+          return;
+        }
+        try {
+          await roomService.joinRoom({
+            roomId,
+            participantId,
+            participantName: displayName,
+          });
+          logger.info(`room:join re-added missing participant ${participantId} (${displayName ?? "Guest"}) to ${roomId}`);
+        } catch (err) {
+          logger.error(`room:join could not re-add ${participantId} to ${roomId}`, err);
+          // Continue — worst case the user shows as missing in roster but
+          // the socket still receives broadcasts.
+        }
       }
       socket.join(roomId);
       // Idempotent: if this socket is already tracked for the room (e.g.
