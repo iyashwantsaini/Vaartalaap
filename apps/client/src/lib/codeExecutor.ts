@@ -100,11 +100,13 @@ const updateQuotaFromHeaders = (headers: Headers) => {
   });
 };
 
-const runOnJudge0 = async (langValue: string, code: string, stdin: string): Promise<ExecResult> => {  // Judge0 is disabled — bundling a RapidAPI key in the SPA would expose it to
+const runOnJudge0 = async (langValue: string, code: string, stdin: string): Promise<ExecResult> => {
+  // Judge0 is disabled — bundling a RapidAPI key in the SPA would expose it to
   // anyone reading our static JS. Leaving the implementation in place so it
   // can be re-enabled (or moved server-side) without rewiring the chain.
   return { output: "Judge0 backend is disabled in this build." };
-  // eslint-disable-next-line no-unreachable  if (!judge0Key) {
+  // eslint-disable-next-line no-unreachable
+  if (!judge0Key) {
     return { output: "Judge0 API key missing.\nSet VITE_JUDGE0_KEY in apps/client/.env (sign up at https://rapidapi.com/judge0-official/api/judge0-ce)." };
   }
   const lang = languages.find((l) => l.value === langValue);
